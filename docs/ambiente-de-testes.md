@@ -39,15 +39,19 @@ Em **Authentication → Emails → Templates**, cole o conteúdo de `supabase/te
 > A faixa laranja "Ambiente de testes" (`NEXT_PUBLIC_ENV_LABEL`) some se a variável for removida (produção).
 
 ## 5. Roteiro de teste (checklist)
-- [ ] Abrir a URL: aparece o aviso "Ambiente de testes" e a tela de login.
+- [ ] Abrir a URL: aparece o aviso "Ambiente de testes" e a tela de login (logo à esquerda, formulário à direita).
 - [ ] Criar conta → chega o e-mail de confirmação (verifique o spam) → confirmar → entrar.
 - [ ] Criar a clínica → o preset de exemplo aparece.
 - [ ] Editar um critério, recarregar a página: o valor continua.
 - [ ] Abrir em outro navegador/aba anônima, entrar com a mesma conta: os presets são os mesmos.
 - [ ] Criar uma segunda conta (outro e-mail) e outra clínica: ela **não** vê os presets da primeira.
-- [ ] Enviar um PDF fictício (botões de exemplo) e conferir o semáforo.
+- [ ] Usar "Esqueci minha senha": chega o e-mail, o link abre a tela de nova senha e, depois de salvar, o app abre.
+- [ ] Enviar um PDF fictício (botão "Testar com um laudo de exemplo") e conferir o semáforo.
 - [ ] Na aba Network do navegador, confirmar que o PDF não é enviado a nenhum servidor.
 
 ## Limitações conhecidas desta versão
-Não há ainda convite de outros médicos para a mesma clínica nem tela de "esqueci minha senha"
-(o template de recuperação já está pronto para quando a tela existir).
+Não há ainda convite de outros médicos para a mesma clínica.
+
+"Esqueci minha senha" já existe na tela de login: o link enviado por e-mail abre uma tela para criar a nova senha.
+Para isso funcionar, a URL do site precisa estar em **Authentication → URL Configuration** (Site URL e Redirect URLs)
+e o e-mail precisa chegar (configure o SMTP do Brevo).

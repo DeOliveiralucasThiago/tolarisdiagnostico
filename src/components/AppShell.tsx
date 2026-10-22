@@ -3,8 +3,8 @@
 import type { Session } from "@supabase/supabase-js";
 import { useEffect, useMemo, useState } from "react";
 import { Analyzer } from "./Analyzer";
-import { AuthForm } from "./AuthForm";
-import { Logo } from "./Icons";
+import { AuthForm, NewPasswordForm } from "./AuthForm";
+import { AuthLayout } from "./AuthLayout";
 import { createClinic, fetchClinic, type Clinic } from "@/lib/cloud-store";
 import { cloudStorage, localStorageAdapter } from "@/lib/storage";
 import { getSupabase, supabaseConfigured } from "@/lib/supabase";
@@ -19,10 +19,15 @@ function CloudApp() {
   const [session, setSession] = useState<Session | null | undefined>(undefined);
   const [clinic, setClinic] = useState<Clinic | null | undefined>(undefined);
   const [error, setError] = useState("");
+  const [recovering, setRecovering] = useState(false);
 
   useEffect(() => {
     db.auth.getSession().then(({ data }) => setSession(data.session));
-    const { data } = db.auth.onAuthStateChange((_event, s) => setSession(s));
+    const { data } = db.auth.onAuthStateChange((event, s) => {
+      // link de "esqueci minha senha": pede a nova senha antes de entrar no app
+      if (event === "PASSWORD_RECOVERY") setRecovering(true);
+      setSession(s);
+    });
     return () => data.subscription.unsubscribe();
   }, [db]);
 
@@ -39,6 +44,7 @@ function CloudApp() {
 
   if (session === undefined) return <main><p className="muted">Carregando…</p></main>;
   if (!session) return <AuthForm />;
+  if (recovering) return <NewPasswordForm onDone={() => setRecovering(false)} />;
   if (error) return <main><p className="err" role="alert">Erro: {error}</p></main>;
   if (clinic === undefined) return <main><p className="muted">Carregando sua clínica…</p></main>;
   if (clinic === null) return <CreateClinic onCreated={setClinic} onSignOut={() => db.auth.signOut()} />;
@@ -70,24 +76,18 @@ function CreateClinic({ onCreated, onSignOut }: { onCreated: (c: Clinic) => void
   };
 
   return (
-    <main className="auth-wrap">
-      <div className="auth-card">
-        <div className="auth-brand">
-          <Logo size={48} />
-          <div>
-            <h1>Quase lá</h1>
-            <p className="sub">Cadastre o nome da sua clínica. Os critérios de análise ficam vinculados a ela.</p>
-          </div>
-        </div>
-        <form className="card" onSubmit={submit}>
-          <input type="text" required placeholder="Nome da clínica" value={name} onChange={(e) => setName(e.target.value)} aria-label="Nome da clínica" />
-          <button className="primary" disabled={busy || !name.trim()}>{busy ? "Criando…" : "Criar clínica"}</button>
-          {error && <p className="err" role="alert">{error}</p>}
-        </form>
-        <div style={{ textAlign: "center" }}>
-          <button className="ghost" onClick={onSignOut}>Sair</button>
-        </div>
-      </div>
-    </main>
+    <AuthLayout>
+      <h2 className="auth-title">Quase lá</h2>
+      <p className="muted" style={{ marginBottom: 18 }}>Cadastre o nome da sua clínica. Os critérios de análise ficam vinculados a ela.</p>
+      <form className="auth-form" onSubmit={submit}>
+        <label className="field">
+          <span>Nome da clínica</span>
+          <input type="text" required placeholder="Ex.: Clínica Saúde Ocupacional" value={name} onChange={(e) => setName(e.target.value)} />
+        </label>
+        <button className="primary big" disabled={busy || !name.trim()}>{busy ? "Criando…" : "Criar clínica"}</button>
+        {error && <p className="err" role="alert">{error}</p>}
+        <button type="button" className="link" onClick={onSignOut}>Sair</button>
+      </form>
+    </AuthLayout>
   );
 }

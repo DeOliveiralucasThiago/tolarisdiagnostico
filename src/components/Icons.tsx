@@ -22,11 +22,6 @@ export const IconHelp = (p: SVGProps<SVGSVGElement>) => (
 );
 
 export function Logo({ size = 32 }: { size?: number }) {
-  return (
-    <svg width={size} height={size} viewBox="0 0 32 32" aria-hidden="true">
-      <rect width="32" height="32" rx="9" fill="var(--brand)" />
-      <path d="M16 6.5c3.6 4.2 6.5 7.3 6.5 10.6a6.5 6.5 0 0 1-13 0C9.5 13.8 12.4 10.7 16 6.5Z" fill="#fff" opacity=".95" />
-      <path d="M16 13.5v7M12.5 17h7" stroke="var(--brand)" strokeWidth="2" strokeLinecap="round" />
-    </svg>
-  );
+  // eslint-disable-next-line @next/next/no-img-element
+  return <img src="/brand/logo-icon.png" width={size} height={size} alt="" style={{ display: "block", objectFit: "contain" }} />;
 }
