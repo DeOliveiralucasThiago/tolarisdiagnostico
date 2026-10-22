@@ -54,3 +54,21 @@ it("não confunde 'Colesterol total' com HDL/LDL nem 'Hemoglobina' com glicada",
   expect(got).toEqual({ hba1c: 5.4, hemoglobina: 15.1 });
   expect(out.notFound).toEqual(["creatinina"]);
 });
+
+it("layout de bloco com 'RESULTADO 4,6 mEq/L' e referência em 'Valor de DE x A y' (laudo real, dados fictícios)", () => {
+  const mk = (str: string, y: number, x = 50) => ({ str, x, y, width: 60, page: 1 });
+  const items = [
+    mk("POTASSIO", 700), mk("Material : Soro", 690), mk("Metodo : ELETRODO SELETIVO", 680),
+    mk("RESULTADO 4,6 mEq/L", 670), mk("Valor de DE 3,5 A 5,1 mEq/L", 660), mk("Referencia :", 650),
+    mk("25-HIDROXIVITAMINA D", 600), mk("Material : Soro", 590), mk("RESULTADO: 28,4 ng/mL", 580),
+    mk("VR : DEFICIENTE : INFERIOR A 20,0 ng/mL", 570),
+    mk("TSH ULTRA SENSÍVEL", 500), mk("RESULTADO: 2,25 microUI/mL", 480),
+    mk("Leucocitos", 400), mk("7.900", 400, 200), mk("3500 - 10500", 400, 300),
+  ];
+  const out = extractResults(items, ["potassio", "vitamina_d", "tsh", "leucocitos"]);
+  const by = Object.fromEntries(out.results.map((r) => [r.examId, r]));
+  expect(by.potassio).toMatchObject({ value: 4.6, unit: "mEq/L", labReference: "DE 3,5 A 5,1 mEq/L" });
+  expect(by.vitamina_d.value).toBe(28.4);
+  expect(by.tsh).toMatchObject({ value: 2.25, unit: "microUI/mL" });
+  expect(by.leucocitos).toMatchObject({ value: 7900, labReference: "3500 - 10500" });
+});

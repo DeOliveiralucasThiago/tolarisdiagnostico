@@ -18,6 +18,9 @@ interface Row {
 const ROW_TOLERANCE = 3;
 const MAX_LABEL_OFFSET = 3; // o nome do exame deve estar no começo da linha
 const LOOKAHEAD_ROWS = 3;
+// Referências por população (crianças, homem/mulher...) são ambíguas: melhor omitir do que mostrar a errada.
+const AMBIGUOUS_REFERENCE = /(crian|recem|gestant|adulto|homem|mulher|masculin|feminin|desej|deficien|ideal|idade|meses|anos|:\s*$)/i;
+
 
 const STOP_WORDS = (n: string) =>
   n.startsWith("refer") || ["vr", "ref", "metodo", "material", "intervalo", "valores", "amostra"].includes(n);
@@ -29,10 +32,10 @@ const REFERENCE_WORDS = new Set([
   "criancas", "limite", "borderline",
 ]);
 
-const RANGE_JOINERS = new Set(["a", "-", "–", "—", "ate"]);
+const isRangeJoiner = (t?: Tok) => !!t && (t.norm === "a" || t.norm === "ate" || /^[-–—]$/.test(t.raw));
 
 const UNIT_RE =
-  /^(?:%|(?:[mnµup]?g|[mnµu]?ui|u|mil|milh(?:ões|oes)|mmol|meq|fl|pg|seg)(?:\/[a-zµ³0-9]+)?|\/(?:mm³|mm3|µl|ul)|mm³|mm3)$/i;
+  /^(?:%|(?:[mnµup]?g|[mnµu]?ui|micro?ui|u|mil|milh(?:ões|oes)|mmol|meq|fl|pg|seg)(?:\/[a-zµ³0-9]+)?|\/(?:mm³|mm3|µl|ul)|mm³|mm3)$/i;
 
 export function buildRows(items: TextItem[]): Row[] {
   const sorted = [...items]
@@ -174,7 +177,7 @@ function scan(tokens: Tok[], from: number): Scan {
       referencePending = false;
       continue;
     }
-    if (isNumeric(t.raw) && RANGE_JOINERS.has(tokens[i + 1]?.norm) && tokens[i + 2] && isNumeric(tokens[i + 2].raw)) {
+    if (isNumeric(t.raw) && isRangeJoiner(tokens[i + 1]) && tokens[i + 2] && isNumeric(tokens[i + 2].raw)) {
       out.reference.push(t.raw, tokens[i + 1].raw, tokens[i + 2].raw);
       i += 2;
       const u = unitAt(tokens, i + 1);
@@ -283,13 +286,31 @@ export function extractResults(items: TextItem[], examIds?: string[]): Extractio
     const chosen = pickCandidate(sc, headerFor(sourceRows[sourceRows.length - 1], headers));
     if (!chosen) return;
 
+    // faixa do laboratório em linhas próprias logo abaixo: "Valor de referência: ...", "VR : ..."
+    let labReference = sc.reference.length ? sc.reference.join(" ") : undefined;
+    if (!labReference) {
+      const last = rows.indexOf(sourceRows[sourceRows.length - 1]);
+      for (let k = 1; k <= LOOKAHEAD_ROWS; k++) {
+        const next = rows[last + k];
+        if (!next || next.page !== row.page || matchLabel(next, aliases)) break;
+        const first = next.tokens[0]?.norm;
+        if (first === "vr" || first === "valor" || first === "valores" || first?.startsWith("refer")) {
+          const text = next.text.replace(/^(valores?\s+de\s+refer[eê]ncia|valor\s+de|valores?|vr|refer[eê]ncia)\s*:?\s*/i, "").slice(0, 90);
+          labReference = text;
+          break;
+        }
+      }
+    }
+
+    if (labReference && AMBIGUOUS_REFERENCE.test(labReference)) labReference = undefined;
+
     found.set(label.def.id, {
       examId: label.def.id,
       value: chosen.value,
       raw: chosen.raw,
       qualifier: chosen.qualifier,
       unit: chosen.unit,
-      labReference: sc.reference.length ? sc.reference.join(" ") : undefined,
+      labReference,
       source: { page: row.page, text: sourceRows.map((r) => r.text).join(" ⏎ ") },
     });
   });

@@ -21,6 +21,14 @@ export const EXAMS: ExamDefinition[] = [
   { id: "hematocrito", name: "Hematócrito", unit: "%", aliases: ["hematocrito", "ht"] },
   { id: "leucocitos", name: "Leucócitos", unit: "/mm³", aliases: ["leucocitos", "leucocitos totais", "global de leucocitos"] },
   { id: "plaquetas", name: "Plaquetas", unit: "/mm³", aliases: ["plaquetas", "contagem de plaquetas"] },
+  { id: "sodio", name: "Sódio", unit: "mEq/L", aliases: ["sodio", "sodio serico"], exclude: ["urina"] },
+  { id: "potassio", name: "Potássio", unit: "mEq/L", aliases: ["potassio", "potassio serico"], exclude: ["urina"] },
+  { id: "ferritina", name: "Ferritina", unit: "ng/mL", aliases: ["ferritina", "ferritina serica"] },
+  { id: "vitamina_d", name: "Vitamina D (25-OH)", unit: "ng/mL", aliases: ["25-hidroxivitamina d", "25 hidroxivitamina d", "vitamina d", "25-oh vitamina d", "vitamina d 25-hidroxi"] },
+  { id: "vitamina_b12", name: "Vitamina B12", unit: "pg/mL", aliases: ["vitamina b12", "cobalamina"] },
+  { id: "t4_livre", name: "T4 livre", unit: "ng/dL", aliases: ["t4 livre", "tiroxina livre"] },
+  { id: "testosterona_total", name: "Testosterona total", unit: "ng/dL", aliases: ["testosterona total"] },
+  { id: "prolactina", name: "Prolactina", unit: "ng/mL", aliases: ["prolactina"] },
   { id: "tsh", name: "TSH", unit: "µUI/mL", aliases: ["tsh", "hormonio tireoestimulante"] },
 ];
 
