@@ -3,10 +3,11 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { PresetEditor } from "@/components/PresetEditor";
 import { Results } from "@/components/Results";
+import { catalogWith, loadCustomExams, saveCustomExams } from "@/lib/custom-exams";
 import { extractResults } from "@/lib/extract";
 import { readPdfInBrowser } from "@/lib/pdf-browser";
 import { DEFAULT_PRESET, loadPresets, savePresets, type Preset } from "@/lib/presets";
-import type { ExtractionOutput, TextItem } from "@/lib/types";
+import type { ExamDefinition, ExtractionOutput, TextItem } from "@/lib/types";
 
 const SAMPLES = [
   { file: "exemplo-layout-a.pdf", label: "Exemplo layout A" },
@@ -17,6 +18,7 @@ const SAMPLES = [
 export default function Home() {
   const [presets, setPresets] = useState<Preset[]>([DEFAULT_PRESET]);
   const [activeId, setActiveId] = useState(DEFAULT_PRESET.id);
+  const [customExams, setCustomExams] = useState<ExamDefinition[]>([]);
   const [items, setItems] = useState<TextItem[] | null>(null);
   const [fileName, setFileName] = useState("");
   const [overrides, setOverrides] = useState<Record<string, string>>({});
@@ -29,6 +31,7 @@ export default function Home() {
     const stored = loadPresets();
     setPresets(stored);
     setActiveId(stored[0].id);
+    setCustomExams(loadCustomExams());
     loaded.current = true;
   }, []);
 
@@ -36,6 +39,11 @@ export default function Home() {
     if (loaded.current) savePresets(presets);
   }, [presets]);
 
+  useEffect(() => {
+    if (loaded.current) saveCustomExams(customExams);
+  }, [customExams]);
+
+  const catalog = catalogWith(customExams);
   const active = presets.find((p) => p.id === activeId) ?? presets[0];
 
   const openPdf = useCallback(async (source: File | ArrayBuffer, name: string) => {
@@ -58,7 +66,7 @@ export default function Home() {
     await openPdf(buf, file);
   };
 
-  const output: ExtractionOutput | null = items ? extractResults(items, Object.keys(active.rules)) : null;
+  const output: ExtractionOutput | null = items ? extractResults(items, Object.keys(active.rules), catalog) : null;
   const noText = items !== null && items.length === 0;
 
   return (
@@ -74,6 +82,9 @@ export default function Home() {
       <PresetEditor
         presets={presets}
         activeId={active.id}
+        catalog={catalog}
+        customExams={customExams}
+        onCustomExamsChange={setCustomExams}
         onChange={(p, id) => {
           setPresets(p);
           setActiveId(id);
@@ -124,6 +135,7 @@ export default function Home() {
       {output && !noText && (
         <Results
           output={output}
+          catalog={catalog}
           rules={active.rules}
           overrides={overrides}
           onOverride={(id, v) => setOverrides((o) => ({ ...o, [id]: v }))}

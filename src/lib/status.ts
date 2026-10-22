@@ -2,6 +2,8 @@ import type { Rule, Status } from "./types";
 
 export function evaluate(value: number | null | undefined, rule: Rule | undefined): Status {
   if (value == null || Number.isNaN(value) || !rule) return "unknown";
+  // regra sem nenhuma faixa definida: nada a avaliar (não pode virar "verde")
+  if (rule.attentionFrom == null && rule.alertFrom == null && rule.attentionBelow == null && rule.alertBelow == null) return "unknown";
   if (rule.alertFrom != null && value >= rule.alertFrom) return "red";
   if (rule.alertBelow != null && value < rule.alertBelow) return "red";
   if (rule.attentionFrom != null && value >= rule.attentionFrom) return "orange";

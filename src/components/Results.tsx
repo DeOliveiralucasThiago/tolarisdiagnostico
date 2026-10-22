@@ -1,11 +1,11 @@
 "use client";
 
-import { EXAMS_BY_ID } from "@/lib/exams";
 import { evaluate, STATUS_LABEL, STATUS_ORDER } from "@/lib/status";
-import type { ExtractionOutput, Rule } from "@/lib/types";
+import type { ExamDefinition, ExtractionOutput, Rule } from "@/lib/types";
 
 interface Props {
   output: ExtractionOutput;
+  catalog: ExamDefinition[];
   rules: Record<string, Rule>;
   /** Valores corrigidos/digitados pelo médico, por exame. */
   overrides: Record<string, string>;
@@ -21,9 +21,10 @@ function describeRule(rule: Rule): string {
   return parts.join(" · ");
 }
 
-export function Results({ output, rules, overrides, onOverride }: Props) {
+export function Results({ output, catalog, rules, overrides, onOverride }: Props) {
+  const examById = new Map(catalog.map((e) => [e.id, e]));
   const byId = new Map(output.results.map((r) => [r.examId, r]));
-  const examIds = Object.keys(rules);
+  const examIds = Object.keys(rules).filter((id) => examById.has(id));
 
   const rows = examIds
     .map((id) => {
@@ -31,7 +32,7 @@ export function Results({ output, rules, overrides, onOverride }: Props) {
       const override = overrides[id];
       const value = override !== undefined && override !== "" ? Number(override.replace(",", ".")) : found?.value ?? null;
       const status = evaluate(value, rules[id]);
-      return { id, exam: EXAMS_BY_ID.get(id)!, found, value, status };
+      return { id, exam: examById.get(id)!, found, value, status };
     })
     .sort((a, b) => STATUS_ORDER[a.status] - STATUS_ORDER[b.status]);
 

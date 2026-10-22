@@ -254,9 +254,10 @@ function headerFor(row: Row, headers: Header[]): number | undefined {
 /**
  * Localiza cada exame pelo nome (e sinônimos), independentemente da posição ou ordem no laudo.
  * `examIds` restringe a busca aos exames configurados pelo médico; sem ele, procura todos do catálogo.
+ * `catalog` inclui os exames personalizados criados pelo médico.
  */
-export function extractResults(items: TextItem[], examIds?: string[]): ExtractionOutput {
-  const defs = examIds ? EXAMS.filter((e) => examIds.includes(e.id)) : EXAMS;
+export function extractResults(items: TextItem[], examIds?: string[], catalog: ExamDefinition[] = EXAMS): ExtractionOutput {
+  const defs = examIds ? catalog.filter((e) => examIds.includes(e.id)) : catalog;
   const aliases = buildAliases(defs);
   const rows = buildRows(items);
   const headers = findHeaders(rows);

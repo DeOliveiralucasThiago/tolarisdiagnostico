@@ -41,3 +41,7 @@ describe("evaluate (exemplo do médico: glicose 1-9 verde, 10-19 laranja, 20+ ve
     expect(evaluate(25, low)).toBe("red");
   });
 });
+
+it("regra vazia (exame adicionado sem faixas) não vira verde", () => {
+  expect(evaluate(50, {})).toBe("unknown");
+});

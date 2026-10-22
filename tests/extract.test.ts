@@ -72,3 +72,14 @@ it("layout de bloco com 'RESULTADO 4,6 mEq/L' e referência em 'Valor de DE x A 
   expect(by.tsh).toMatchObject({ value: 2.25, unit: "microUI/mL" });
   expect(by.leucocitos).toMatchObject({ value: 7900, labReference: "3500 - 10500" });
 });
+
+it("exame personalizado criado pelo médico (ex.: Vitamina C) é encontrado pelo texto informado", async () => {
+  const { makeCustomExam } = await import("@/lib/custom-exams");
+  const { EXAMS } = await import("@/lib/exams");
+  const vitC = makeCustomExam("Vitamina C", "Vitamina C, Ácido ascórbico", "mg/dL");
+  const mk = (str: string, y: number, x = 50) => ({ str, x, y, width: 60, page: 1 });
+  const items = [mk("Acido Ascorbico", 700), mk("0,8", 700, 220), mk("mg/dL", 700, 280), mk("0,4 a 2,0", 700, 340)];
+  const out = extractResults(items, [vitC.id], [...EXAMS, vitC]);
+  expect(out.results[0]).toMatchObject({ examId: vitC.id, value: 0.8, unit: "mg/dL" });
+  expect(extractResults(items, [vitC.id], [...EXAMS, vitC]).notFound).toEqual([]);
+});
