@@ -47,7 +47,8 @@ button.ghost { background: transparent; border-color: transparent; color: var(--
 button.ghost:hover:not(:disabled) { background: var(--gray-soft); border-color: transparent; color: var(--text); }
 button.small { padding: 4px 9px; border-radius: 8px; font-size: 13px; }
 button:disabled { opacity: .5; cursor: default; }
-button:focus-visible, input:focus-visible, select:focus-visible, summary:focus-visible, label:focus-within { outline: 2px solid var(--brand); outline-offset: 2px; }
+button:focus-visible, summary:focus-visible, .drop:focus-within { outline: 2px solid var(--brand); outline-offset: 2px; }
+input:focus-visible, select:focus-visible { outline: none; border-color: var(--brand); box-shadow: 0 0 0 3px color-mix(in srgb, var(--brand) 25%, transparent); }
 select, input[type=text], input[type=email], input[type=password], input[type=number] { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 7px 10px; min-width: 0; }
 select:hover, input:hover { border-color: color-mix(in srgb, var(--brand) 35%, var(--line)); }
 input[type=number] { width: 92px; }

@@ -10,6 +10,9 @@ function friendly(message: string): string {
   if (/password should be at least/i.test(message)) return "A senha precisa ter pelo menos 6 caracteres.";
   if (/same password|different from the old/i.test(message)) return "Escolha uma senha diferente da atual.";
   if (/email not confirmed/i.test(message)) return "Confirme seu e-mail antes de entrar (veja a caixa de entrada).";
+  const wait = /after (\d+) seconds/i.exec(message);
+  if (wait) return `Por segurança, aguarde ${wait[1]} segundos antes de pedir outro e-mail.`;
+  if (/email rate limit/i.test(message)) return "O limite de e-mails enviados por hora foi atingido. Tente novamente em cerca de 1 hora.";
   if (/rate limit|too many/i.test(message)) return "Muitas tentativas. Aguarde alguns minutos e tente de novo.";
   if (/failed to fetch|network/i.test(message)) return "Sem conexão com o servidor. Tente novamente.";
   return message;
