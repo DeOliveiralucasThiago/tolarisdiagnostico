@@ -9,7 +9,7 @@ import { Tour } from "@/components/Tour";
 import { makeTourSteps } from "@/components/tour-steps";
 import { Results } from "@/components/Results";
 import { catalogWith } from "@/lib/custom-exams";
-import { analyze } from "@/lib/analysis";
+import { analyze, type Analysis } from "@/lib/analysis";
 import { filterAndSort } from "@/lib/batch";
 import { ageFrom, formatName, parsePatient, type PatientInfo } from "@/lib/patient";
 import { readPdfInBrowser } from "@/lib/pdf-browser";
@@ -30,6 +30,8 @@ interface PatientEntry {
   /** Motivo, quando o PDF não pôde ser analisado. */
   problem?: string;
 }
+
+const READ_CONCURRENCY = 3;
 
 const DEFAULT_ORDER = { status: "all", query: "", examId: "", sort: "critical" } as const;
 
@@ -131,21 +133,31 @@ export function Analyzer({ storage, account }: Props) {
   const addFiles = useCallback(async (sources: { source: File | ArrayBuffer; name: string }[]) => {
     if (!sources.length) return;
     setProgress({ done: 0, total: sources.length });
-    const added: PatientEntry[] = [];
-    for (const [i, s] of sources.entries()) {
+    const added: PatientEntry[] = new Array(sources.length);
+    let next = 0;
+    let done = 0;
+
+    const readOne = async (i: number) => {
+      const s = sources[i];
       const id = newId();
       try {
         const items = await readPdfInBrowser(s.source);
-        added.push(
+        added[i] =
           items.length === 0
             ? { id, fileName: s.name, items, info: {}, problem: "Sem texto selecionável (provavelmente é um scan ou foto)." }
-            : { id, fileName: s.name, items, info: parsePatient(items) },
-        );
+            : { id, fileName: s.name, items, info: parsePatient(items) };
       } catch {
-        added.push({ id, fileName: s.name, items: [], info: {}, problem: "Não foi possível ler este PDF (protegido por senha ou corrompido?)." });
+        added[i] = { id, fileName: s.name, items: [], info: {}, problem: "Não foi possível ler este PDF (protegido por senha ou corrompido?)." };
       }
-      setProgress({ done: i + 1, total: sources.length });
-    }
+      setProgress({ done: ++done, total: sources.length });
+    };
+
+    // lê alguns PDFs ao mesmo tempo para aproveitar os núcleos do computador
+    const worker = async () => {
+      while (next < sources.length) await readOne(next++);
+    };
+    await Promise.all(Array.from({ length: Math.min(READ_CONCURRENCY, sources.length) }, worker));
+
     setPatients((prev) => [...prev, ...added]);
     setProgress(null);
   }, []);
@@ -154,6 +166,7 @@ export function Analyzer({ storage, account }: Props) {
     addFiles(Array.from(files).filter((f) => f.type === "application/pdf" || /\.pdf$/i.test(f.name)).map((f) => ({ source: f, name: f.name })));
 
   const clearAll = useCallback(() => {
+    analysisCache.current.clear();
     setPatients([]);
     setOverrides({});
     setExpanded(new Set());
@@ -168,6 +181,7 @@ export function Analyzer({ storage, account }: Props) {
   }, [addFiles, clearAll]);
 
   const removePatient = (id: string) => {
+    analysisCache.current.delete(id);
     setPatients((ps) => ps.filter((p) => p.id !== id));
     setOverrides(({ [id]: _drop, ...rest }) => rest);
     setExpanded((e) => {
@@ -227,6 +241,17 @@ export function Analyzer({ storage, account }: Props) {
     }
   };
 
+  // Corrigir um valor reanalisa só aquele paciente; mudar critérios reanalisa todos.
+  const analysisCache = useRef(new Map<string, { rules: object; catalog: object; overrides: object | undefined; analysis: Analysis }>());
+  const cachedAnalysis = (p: PatientEntry): Analysis => {
+    const hit = analysisCache.current.get(p.id);
+    const ov = overrides[p.id];
+    if (hit && hit.rules === active.rules && hit.catalog === catalog && hit.overrides === ov) return hit.analysis;
+    const analysis = analyze(p.items, active.rules, catalog, ov);
+    analysisCache.current.set(p.id, { rules: active.rules, catalog, overrides: ov, analysis });
+    return analysis;
+  };
+
   const rows: PatientRow[] = useMemo(
     () =>
       patients.map((p) => {
@@ -237,9 +262,10 @@ export function Analyzer({ storage, account }: Props) {
           fileName: p.fileName,
           subtitle: age != null ? `${age} anos` : "",
           problem: p.problem,
-          analysis: p.problem ? null : analyze(p.items, active.rules, catalog, overrides[p.id]),
+          analysis: p.problem ? null : cachedAnalysis(p),
         };
       }),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     [patients, active.rules, catalog, overrides],
   );
   rowsRef.current = rows;
