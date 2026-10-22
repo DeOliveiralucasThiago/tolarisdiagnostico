@@ -29,6 +29,8 @@ Sem configuração, o app roda em **modo local** (presets só neste navegador). 
 4. Copie `.env.example` para `.env.local` e preencha `NEXT_PUBLIC_SUPABASE_URL` e `NEXT_PUBLIC_SUPABASE_ANON_KEY` (chave pública). **Nunca** use a chave `service_role` no app.
 5. Na hospedagem (ex.: Vercel), defina as mesmas duas variáveis de ambiente.
 
+Para publicar um ambiente de testes (Render + Supabase + Brevo para e-mails), veja [docs/ambiente-de-testes.md](docs/ambiente-de-testes.md). `npm run check:supabase` confere se o projeto está acessível e protegido.
+
 `npm test` inclui testes de isolamento entre clínicas que rodam a migração em um Postgres real (PGlite).
 
 ## Próximos passos

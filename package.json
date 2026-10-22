@@ -8,7 +8,8 @@
     "start": "next start",
     "test": "vitest run",
     "typecheck": "tsc --noEmit",
-    "gen:samples": "tsx scripts/generate-sample-pdfs.ts"
+    "gen:samples": "tsx scripts/generate-sample-pdfs.ts",
+    "check:supabase": "node --env-file-if-exists=.env.local scripts/check-supabase.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.118.0",
@@ -26,5 +27,8 @@
     "tsx": "^4.23.15",
     "typescript": "5.7",
     "vitest": "^5.0.5"
+  },
+  "engines": {
+    "node": ">=20"
   }
 }

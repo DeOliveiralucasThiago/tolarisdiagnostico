@@ -1,0 +1,23 @@
+# Blueprint do Render para o ambiente de testes (staging).
+# Render > New > Blueprint > selecione este repositório. As duas variáveis do Supabase
+# são pedidas na criação (sync: false) e NÃO ficam no repositório.
+services:
+  - type: web
+    name: tolaris-diagnostico-teste
+    runtime: node
+    plan: free
+    region: ohio # mais próximo do Brasil entre as regiões do Render
+    buildCommand: npm ci && npm run build
+    startCommand: npm start
+    healthCheckPath: /
+    autoDeploy: true
+    envVars:
+      - key: NODE_VERSION
+        value: 22
+      # NEXT_PUBLIC_* são embutidas no build: altere e faça novo deploy para valer.
+      - key: NEXT_PUBLIC_SUPABASE_URL
+        sync: false
+      - key: NEXT_PUBLIC_SUPABASE_ANON_KEY
+        sync: false
+      - key: NEXT_PUBLIC_ENV_LABEL
+        value: Ambiente de testes
