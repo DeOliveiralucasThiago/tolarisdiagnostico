@@ -34,4 +34,4 @@ Para publicar um ambiente de testes (Render + Supabase + Brevo para e-mails), ve
 `npm test` inclui testes de isolamento entre clínicas que rodam a migração em um Postgres real (PGlite).
 
 ## Próximos passos
-Validar com laudos reais anonimizados, ampliar o catálogo/sinônimos, faixas por sexo/idade, convite de outros médicos para a clínica, recuperação de senha, cobrança/planos.
+Validar com laudos reais anonimizados, ampliar o catálogo/sinônimos, faixas por sexo/idade, convite de outros médicos para a clínica, cobrança/planos.
