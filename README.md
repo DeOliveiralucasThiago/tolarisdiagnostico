@@ -20,5 +20,16 @@ npm test             # testes de leitura (3 layouts de PDF), números e semáfor
 npm run gen:samples  # regenera os PDFs fictícios em public/samples
 ```
 
+## Login e presets na nuvem (Supabase)
+Sem configuração, o app roda em **modo local** (presets só neste navegador). Com Supabase, cada clínica tem login e os presets/exames personalizados são compartilhados entre os médicos dela. **Nenhum dado de paciente é gravado**: o banco só tem clínicas, usuários e critérios.
+
+1. Crie um projeto em https://supabase.com.
+2. No **SQL Editor**, rode o conteúdo de `supabase/migrations/0001_init.sql` (cria as tabelas com RLS: cada clínica só enxerga os próprios dados).
+3. Em **Authentication → Providers → Email**, decida se exige confirmação de e-mail; em **URL Configuration**, informe a URL do site.
+4. Copie `.env.example` para `.env.local` e preencha `NEXT_PUBLIC_SUPABASE_URL` e `NEXT_PUBLIC_SUPABASE_ANON_KEY` (chave pública). **Nunca** use a chave `service_role` no app.
+5. Na hospedagem (ex.: Vercel), defina as mesmas duas variáveis de ambiente.
+
+`npm test` inclui testes de isolamento entre clínicas que rodam a migração em um Postgres real (PGlite).
+
 ## Próximos passos
-Validar com laudos reais anonimizados, ampliar o catálogo/sinônimos, faixas por sexo/idade, login e presets por clínica (SaaS).
+Validar com laudos reais anonimizados, ampliar o catálogo/sinônimos, faixas por sexo/idade, convite de outros médicos para a clínica, recuperação de senha, cobrança/planos.

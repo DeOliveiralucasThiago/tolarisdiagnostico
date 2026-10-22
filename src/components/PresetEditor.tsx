@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { makeCustomExam } from "@/lib/custom-exams";
-import type { Preset } from "@/lib/presets";
+import { newId, type Preset } from "@/lib/presets";
 import type { ExamDefinition, Rule } from "@/lib/types";
 
 const FIELDS: { key: keyof Rule; label: string }[] = [
@@ -67,7 +67,7 @@ export function PresetEditor({ presets, activeId, catalog, onChange, customExams
   };
 
   const duplicate = () => {
-    const id = Math.random().toString(36).slice(2, 10);
+    const id = newId();
     const copy: Preset = { ...active, id, name: `${active.name} (cópia)`, rules: structuredClone(active.rules) };
     onChange([...presets, copy], id);
   };
