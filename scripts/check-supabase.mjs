@@ -10,12 +10,14 @@ if (!url || !key) {
   console.error("Defina NEXT_PUBLIC_SUPABASE_URL e NEXT_PUBLIC_SUPABASE_ANON_KEY (veja .env.example).");
   process.exit(2);
 }
-if (/service_role/i.test(Buffer.from(key.split(".")[1] ?? "", "base64url").toString())) {
-  console.error("ERRO: essa é a chave service_role. Use somente a chave anon/publishable no app.");
+const isJwt = key.startsWith("eyJ");
+if (key.startsWith("sb_secret_") || (isJwt && /service_role/i.test(Buffer.from(key.split(".")[1] ?? "", "base64url").toString()))) {
+  console.error("ERRO: essa é uma chave SECRETA (service_role/secret). Use somente a chave anon/publishable no app.");
   process.exit(2);
 }
 
-const headers = { apikey: key, Authorization: `Bearer ${key}`, "Content-Type": "application/json" };
+// Chaves novas (sb_publishable_...) vão só em `apikey`; as antigas (JWT anon) também em Authorization.
+const headers = { apikey: key, ...(isJwt ? { Authorization: `Bearer ${key}` } : {}), "Content-Type": "application/json" };
 const results = [];
 const check = async (name, fn) => {
   try {
