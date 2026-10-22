@@ -52,6 +52,30 @@ export function savePresets(presets: Preset[]): void {
   }
 }
 
+const ACTIVE_KEY = "tolaris.activePreset.v1";
+
+/** Último preset escolhido, por usuário (neste navegador). */
+export function loadActivePresetId(scope: string): string | null {
+  try {
+    return localStorage.getItem(`${ACTIVE_KEY}:${scope}`);
+  } catch {
+    return null;
+  }
+}
+
+export function saveActivePresetId(scope: string, id: string): void {
+  try {
+    localStorage.setItem(`${ACTIVE_KEY}:${scope}`, id);
+  } catch {
+    /* ignora */
+  }
+}
+
+/** Usa o preset lembrado se ele ainda existir; senão, o primeiro da lista. */
+export function pickActivePreset(presets: Preset[], storedId: string | null): Preset {
+  return presets.find((p) => p.id === storedId) ?? presets[0];
+}
+
 export function newId(): string {
   return globalThis.crypto?.randomUUID?.() ?? Math.random().toString(36).slice(2) + Date.now().toString(36);
 }

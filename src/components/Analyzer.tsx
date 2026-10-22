@@ -13,7 +13,7 @@ import { analyze, type Analysis } from "@/lib/analysis";
 import { filterAndSort } from "@/lib/batch";
 import { ageFrom, formatName, parsePatient, type PatientInfo } from "@/lib/patient";
 import { readPdfInBrowser } from "@/lib/pdf-browser";
-import { DEFAULT_PRESET, newId, type Preset } from "@/lib/presets";
+import { DEFAULT_PRESET, loadActivePresetId, newId, pickActivePreset, saveActivePresetId, type Preset } from "@/lib/presets";
 import type { Storage } from "@/lib/storage";
 import type { ExamDefinition, TextItem } from "@/lib/types";
 
@@ -63,6 +63,7 @@ export function Analyzer({ storage, account }: Props) {
   const [ready, setReady] = useState(false);
   const [saveError, setSaveError] = useState("");
   const loaded = useRef(false);
+  const prefScope = account?.email ?? "local";
   const savedPresets = useRef<Preset[]>([]);
   const savedExams = useRef<ExamDefinition[]>([]);
   const patientsRef = useRef<PatientEntry[]>([]);
@@ -81,7 +82,7 @@ export function Analyzer({ storage, account }: Props) {
         savedPresets.current = w.presets;
         savedExams.current = w.customExams;
         setPresets(initial);
-        setActiveId(initial[0].id);
+        setActiveId(pickActivePreset(initial, loadActivePresetId(prefScope)).id);
         setCustomExams(w.customExams);
         loaded.current = true;
         setReady(true);
@@ -97,6 +98,11 @@ export function Analyzer({ storage, account }: Props) {
       cancelled = true;
     };
   }, [storage]);
+
+  // lembra o último preset escolhido (por usuário, neste navegador)
+  useEffect(() => {
+    if (loaded.current) saveActivePresetId(prefScope, activeId);
+  }, [activeId, prefScope]);
 
   // salva (com pequena espera) só depois de carregar; grava apenas o que mudou
   useEffect(() => {

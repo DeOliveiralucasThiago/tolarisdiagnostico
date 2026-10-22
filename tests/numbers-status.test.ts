@@ -45,3 +45,14 @@ describe("evaluate (exemplo do médico: glicose 1-9 verde, 10-19 laranja, 20+ ve
 it("regra vazia (exame adicionado sem faixas) não vira verde", () => {
   expect(evaluate(50, {})).toBe("unknown");
 });
+
+import { pickActivePreset } from "@/lib/presets";
+
+describe("pickActivePreset", () => {
+  const ps = [{ id: "a", name: "A", rules: {} }, { id: "b", name: "B", rules: {} }];
+  it("usa o preset lembrado se ainda existir", () => expect(pickActivePreset(ps, "b").id).toBe("b"));
+  it("cai no primeiro se o lembrado foi excluído ou não existe", () => {
+    expect(pickActivePreset(ps, "zzz").id).toBe("a");
+    expect(pickActivePreset(ps, null).id).toBe("a");
+  });
+});
