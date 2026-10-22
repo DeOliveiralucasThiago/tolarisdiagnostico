@@ -1,7 +1,9 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { IconFile, IconLock, IconUpload, Logo } from "@/components/Icons";
 import { PresetEditor } from "@/components/PresetEditor";
+import { SectionHead } from "@/components/SectionHead";
 import { Tour } from "@/components/Tour";
 import { makeTourSteps } from "@/components/tour-steps";
 import { Results } from "@/components/Results";
@@ -14,11 +16,16 @@ import type { ExamDefinition, ExtractionOutput, TextItem } from "@/lib/types";
 
 const TOUR_KEY = "tolaris.tourSeen.v1";
 
-const SAMPLES = [
-  { file: "exemplo-layout-a.pdf", label: "Exemplo layout A" },
-  { file: "exemplo-layout-b.pdf", label: "Exemplo layout B" },
-  { file: "exemplo-layout-c.pdf", label: "Exemplo layout C" },
-];
+const EXAMPLE_FILE = "exemplo-layout-a.pdf";
+
+// Variações de layout existem só para desenvolvimento/testes de leitura; o médico vê apenas o exemplo principal.
+const DEV_SAMPLES =
+  process.env.NODE_ENV !== "production"
+    ? [
+        { file: "exemplo-layout-b.pdf", label: "Layout B" },
+        { file: "exemplo-layout-c.pdf", label: "Layout C" },
+      ]
+    : [];
 
 export interface Account {
   email: string;
@@ -45,6 +52,7 @@ export function Analyzer({ storage, account }: Props) {
   const [busy, setBusy] = useState(false);
   const [over, setOver] = useState(false);
   const [tourOpen, setTourOpen] = useState(false);
+  const [presetOpen, setPresetOpen] = useState(true);
   const [ready, setReady] = useState(false);
   const [saveError, setSaveError] = useState("");
   const loaded = useRef(false);
@@ -71,6 +79,7 @@ export function Analyzer({ storage, account }: Props) {
         setReady(true);
         try {
           if (!localStorage.getItem(TOUR_KEY)) setTimeout(() => setTourOpen(true), 600);
+          else setPresetOpen(false); // quem já conhece a ferramenta vê os critérios recolhidos
         } catch {
           /* sem armazenamento: não abre sozinho */
         }
@@ -135,13 +144,23 @@ export function Analyzer({ storage, account }: Props) {
 
   const ensureSample = async () => {
     if (itemsRef.current) return;
-    await loadSample("exemplo-layout-a.pdf");
+    await loadSample(EXAMPLE_FILE);
     tourLoadedSample.current = true;
   };
 
   // estável entre renders: o Tour reage à identidade dos passos
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  const tourSteps = useMemo(() => makeTourSteps(ensureSample), []);
+  const tourSteps = useMemo(
+    () =>
+      makeTourSteps({
+        ensureSample,
+        openPreset: async () => {
+          setPresetOpen(true);
+          await new Promise((r) => setTimeout(r, 120));
+        },
+      }),
+    [],
+  );
 
   const closeTour = () => {
     setTourOpen(false);
@@ -173,26 +192,32 @@ export function Analyzer({ storage, account }: Props) {
 
   return (
     <main>
-      <div className="header">
-        <div>
-          <h1>Tolaris Diagnóstico</h1>
-          <p className="sub">Triagem rápida de exames de sangue: encontra cada resultado no laudo e aplica os seus critérios.</p>
+      <header className="header">
+        <div className="brand">
+          <Logo size={38} />
+          <div>
+            <div className="brand-name">Tolaris Diagnóstico</div>
+            <div className="brand-tag">Triagem rápida de exames de sangue</div>
+          </div>
         </div>
-        <div className="row">
+        <div className="header-actions">
           {account && (
-            <span className="muted">
-              {account.clinicName} · {account.email}
+            <span className="chip" title={account.email}>
+              <strong>{account.clinicName}</strong>
             </span>
           )}
-          <button onClick={() => setTourOpen(true)}>Ver tour</button>
+          <button className="ghost" onClick={() => setTourOpen(true)}>Ver tour</button>
           {account && <button onClick={account.onSignOut}>Sair</button>}
         </div>
-      </div>
+      </header>
       {saveError && <p className="err" role="alert">{saveError}</p>}
 
       <div className="card privacy" data-tour="privacy">
-        <strong>Privacidade:</strong> o PDF é lido aqui no seu navegador e <strong>não é enviado nem armazenado</strong>.
-        Ao fechar ou trocar o arquivo, os dados do paciente desaparecem. Só os seus critérios (presets) são salvos, {account ? "na sua clínica" : "neste navegador"}, nunca dados de pacientes.
+        <IconLock />
+        <div>
+          <strong>Os dados do paciente não saem do seu computador.</strong> O PDF é lido aqui no navegador, não é enviado nem
+          armazenado e some ao trocar de arquivo. Só os seus critérios (presets) são salvos, {account ? "na sua clínica" : "neste navegador"}.
+        </div>
       </div>
 
       <PresetEditor
@@ -201,6 +226,8 @@ export function Analyzer({ storage, account }: Props) {
         catalog={catalog}
         customExams={customExams}
         onCustomExamsChange={setCustomExams}
+        open={presetOpen}
+        onToggle={() => setPresetOpen((o) => !o)}
         onChange={(p, id) => {
           setPresets(p);
           setActiveId(id);
@@ -208,10 +235,9 @@ export function Analyzer({ storage, account }: Props) {
       />
 
       <section className="card" data-tour="upload">
-        <h2>2. Laudo do paciente</h2>
+        <SectionHead n={2} title="Laudo do paciente" hint="Envie o PDF do exame; a ferramenta encontra cada resultado pelo nome do exame." />
         <label
           className={`drop${over ? " over" : ""}`}
-          style={{ display: "block", cursor: "pointer" }}
           onDragOver={(e) => { e.preventDefault(); setOver(true); }}
           onDragLeave={() => setOver(false)}
           onDrop={(e) => {
@@ -221,7 +247,9 @@ export function Analyzer({ storage, account }: Props) {
             if (f) openPdf(f, f.name);
           }}
         >
-          {busy ? "Lendo…" : "Arraste o PDF aqui ou clique para escolher"}
+          <span className="drop-icon"><IconUpload /></span>
+          <strong>{busy ? "Lendo o laudo…" : "Arraste o PDF aqui"}</strong>
+          <span className="muted">ou clique para escolher o arquivo</span>
           <input
             type="file"
             accept="application/pdf"
@@ -233,13 +261,16 @@ export function Analyzer({ storage, account }: Props) {
             }}
           />
         </label>
-        <div className="row" style={{ marginTop: 10 }}>
-          <span className="muted">Sem laudo à mão? Teste com PDFs fictícios:</span>
-          {SAMPLES.map((s) => (
-            <button key={s.file} onClick={() => loadSample(s.file)}>{s.label}</button>
+        <div className="row" style={{ marginTop: 12 }}>
+          <button className="small" onClick={() => loadSample(EXAMPLE_FILE)}>Testar com um laudo de exemplo</button>
+          {DEV_SAMPLES.map((s) => (
+            <button key={s.file} className="small ghost" onClick={() => loadSample(s.file)}>{s.label}</button>
           ))}
+          <span className="muted">Nesta versão são lidos laudos digitais (PDF com texto), não fotos nem scans.</span>
         </div>
-        {fileName && <p className="muted">Arquivo: {fileName}</p>}
+        {fileName && (
+          <span className="file-pill"><IconFile width={16} height={16} /> {fileName}</span>
+        )}
         {error && <p className="err">{error}</p>}
         {noText && (
           <p className="err">
@@ -257,6 +288,7 @@ export function Analyzer({ storage, account }: Props) {
           onOverride={(id, v) => setOverrides((o) => ({ ...o, [id]: v }))}
         />
       )}
+      <p className="app-foot">Ferramenta de apoio à triagem. A interpretação e a decisão clínica são sempre do médico.</p>
       {tourOpen && <Tour steps={tourSteps} onClose={closeTour} />}
     </main>
   );

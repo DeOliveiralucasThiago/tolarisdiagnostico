@@ -4,7 +4,7 @@ const Dot = ({ c }: { c: "green" | "orange" | "red" | "unknown" }) => (
   <i className={`dot ${c}`} style={{ width: 12, height: 12, marginRight: 6 }} />
 );
 
-export function makeTourSteps(ensureSample: () => Promise<void>): TourStep[] {
+export function makeTourSteps({ ensureSample, openPreset }: { ensureSample: () => Promise<void>; openPreset: () => Promise<void> }): TourStep[] {
   return [
     {
       title: "Bem-vindo ao Tolaris Diagnóstico",
@@ -24,6 +24,7 @@ export function makeTourSteps(ensureSample: () => Promise<void>): TourStep[] {
     },
     {
       target: "preset",
+      before: openPreset,
       title: "1. Escolha ou crie um preset",
       body: (
         <>
@@ -34,6 +35,7 @@ export function makeTourSteps(ensureSample: () => Promise<void>): TourStep[] {
     },
     {
       target: "rule-row",
+      before: openPreset,
       title: "Defina as faixas de cada exame",
       body: (
         <>
@@ -46,6 +48,7 @@ export function makeTourSteps(ensureSample: () => Promise<void>): TourStep[] {
     },
     {
       target: "add-exam",
+      before: openPreset,
       title: "Precisa de outro exame? Use o “+”",
       body: (
         <>

@@ -4,6 +4,7 @@ import type { Session } from "@supabase/supabase-js";
 import { useEffect, useMemo, useState } from "react";
 import { Analyzer } from "./Analyzer";
 import { AuthForm } from "./AuthForm";
+import { Logo } from "./Icons";
 import { createClinic, fetchClinic, type Clinic } from "@/lib/cloud-store";
 import { cloudStorage, localStorageAdapter } from "@/lib/storage";
 import { getSupabase, supabaseConfigured } from "@/lib/supabase";
@@ -69,17 +70,24 @@ function CreateClinic({ onCreated, onSignOut }: { onCreated: (c: Clinic) => void
   };
 
   return (
-    <main style={{ maxWidth: 420 }}>
-      <h1>Quase lá</h1>
-      <p className="sub">Cadastre o nome da sua clínica. Os presets de critérios ficam vinculados a ela.</p>
-      <form className="card" onSubmit={submit}>
-        <div style={{ display: "grid", gap: 10 }}>
+    <main className="auth-wrap">
+      <div className="auth-card">
+        <div className="auth-brand">
+          <Logo size={48} />
+          <div>
+            <h1>Quase lá</h1>
+            <p className="sub">Cadastre o nome da sua clínica. Os critérios de análise ficam vinculados a ela.</p>
+          </div>
+        </div>
+        <form className="card" onSubmit={submit}>
           <input type="text" required placeholder="Nome da clínica" value={name} onChange={(e) => setName(e.target.value)} aria-label="Nome da clínica" />
           <button className="primary" disabled={busy || !name.trim()}>{busy ? "Criando…" : "Criar clínica"}</button>
+          {error && <p className="err" role="alert">{error}</p>}
+        </form>
+        <div style={{ textAlign: "center" }}>
+          <button className="ghost" onClick={onSignOut}>Sair</button>
         </div>
-        {error && <p className="err" role="alert">{error}</p>}
-      </form>
-      <button onClick={onSignOut}>Sair</button>
+      </div>
     </main>
   );
 }

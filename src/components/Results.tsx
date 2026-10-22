@@ -1,7 +1,8 @@
 "use client";
 
+import { SectionHead } from "./SectionHead";
 import { evaluate, STATUS_LABEL, STATUS_ORDER } from "@/lib/status";
-import type { ExamDefinition, ExtractionOutput, Rule } from "@/lib/types";
+import type { ExamDefinition, ExtractionOutput, Rule, Status } from "@/lib/types";
 
 interface Props {
   output: ExtractionOutput;
@@ -21,6 +22,13 @@ function describeRule(rule: Rule): string {
   return parts.join(" · ");
 }
 
+const STATS: { status: Status; label: string }[] = [
+  { status: "red", label: "acima do limite" },
+  { status: "orange", label: "para analisar" },
+  { status: "green", label: "dentro do padrão" },
+  { status: "unknown", label: "não localizados" },
+];
+
 export function Results({ output, catalog, rules, overrides, onOverride }: Props) {
   const examById = new Map(catalog.map((e) => [e.id, e]));
   const byId = new Map(output.results.map((r) => [r.examId, r]));
@@ -36,45 +44,49 @@ export function Results({ output, catalog, rules, overrides, onOverride }: Props
     })
     .sort((a, b) => STATUS_ORDER[a.status] - STATUS_ORDER[b.status]);
 
-  const count = (s: string) => rows.filter((r) => r.status === s).length;
+  const count = (s: Status) => rows.filter((r) => r.status === s).length;
 
   return (
     <section className="card">
-      <h2>3. Resultado da análise</h2>
-      <div className="summary" aria-live="polite" data-tour="summary">
-        <span><i className="dot red" /> {count("red")} acima do limite</span>
-        <span><i className="dot orange" /> {count("orange")} para analisar</span>
-        <span><i className="dot green" /> {count("green")} dentro do padrão</span>
-        <span><i className="dot unknown" /> {count("unknown")} não localizados</span>
+      <SectionHead
+        n={3}
+        title="Resultado da análise"
+        hint="Do mais crítico ao mais tranquilo. Confira os valores lidos e corrija se necessário."
+      />
+      <div className="stats" aria-live="polite" data-tour="summary">
+        {STATS.map((s) => (
+          <div key={s.status} className={`stat ${s.status}`}>
+            <b>{count(s.status)}</b>
+            <span>{s.label}</span>
+          </div>
+        ))}
       </div>
-      <p className="muted">
-        Confira os valores lidos. Se algum exame não foi localizado (cinza), digite o valor manualmente.
-        Ferramenta de apoio à triagem: a decisão clínica é do médico.
-      </p>
       <div className="scroll" data-tour="table">
-        <table>
+        <table className="results-table">
           <thead>
             <tr>
-              <th></th><th>Exame</th><th>Resultado</th><th>Ref. do laboratório</th><th>Seus critérios</th><th>Origem</th>
+              <th>Situação</th><th>Exame</th><th>Resultado</th><th>Ref. do laboratório</th><th>Seus critérios</th><th>Origem</th>
             </tr>
           </thead>
           <tbody>
             {rows.map(({ id, exam, found, status }) => (
-              <tr key={id}>
-                <td><i className={`dot ${status}`} title={STATUS_LABEL[status]} role="img" aria-label={STATUS_LABEL[status]} /></td>
-                <td>{exam.name}</td>
+              <tr key={id} className={`row-${status}`}>
                 <td>
+                  <span className={`pill ${status}`} title={STATUS_LABEL[status]}><i className={`dot ${status}`} /><span className="pill-text">{STATUS_LABEL[status]}</span></span>
+                </td>
+                <td className="exam-name">{exam.name}</td>
+                <td style={{ whiteSpace: "nowrap" }}>
                   <input
                     type="text"
                     inputMode="decimal"
-                    style={{ width: 90 }}
+                    className="value-input"
                     value={overrides[id] ?? (found ? String(found.value).replace(".", ",") : "")}
                     placeholder="—"
                     onChange={(e) => onOverride(id, e.target.value)}
                     aria-label={`Resultado de ${exam.name}`}
-                  />{" "}
-                  <span className="muted">{found?.unit ?? exam.unit}</span>
-                  {found?.qualifier && <span className="muted"> ({found.raw})</span>}
+                  />
+                  <span className="unit">{found?.unit ?? exam.unit}</span>
+                  {found?.qualifier && <span className="unit">({found.raw})</span>}
                 </td>
                 <td className="muted">{found?.labReference ?? "—"}</td>
                 <td className="muted">{describeRule(rules[id])}</td>
@@ -93,6 +105,9 @@ export function Results({ output, catalog, rules, overrides, onOverride }: Props
           </tbody>
         </table>
       </div>
+      <p className="muted disclaimer">
+        Exames não localizados nunca aparecem como verdes. Se um valor foi lido errado, digite o correto no campo.
+      </p>
     </section>
   );
 }

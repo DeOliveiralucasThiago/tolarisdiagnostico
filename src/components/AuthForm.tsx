@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { Logo } from "@/components/Icons";
 import { getSupabase } from "@/lib/supabase";
 
 function friendly(message: string): string {
@@ -43,12 +44,17 @@ export function AuthForm() {
   };
 
   return (
-    <main style={{ maxWidth: 420 }}>
-      <h1>Tolaris Diagnóstico</h1>
-      <p className="sub">Triagem rápida de exames de sangue para a medicina do trabalho.</p>
-      <form className="card" onSubmit={submit}>
-        <h2>{mode === "login" ? "Entrar" : "Criar conta"}</h2>
-        <div style={{ display: "grid", gap: 10 }}>
+    <main className="auth-wrap">
+      <div className="auth-card">
+        <div className="auth-brand">
+          <Logo size={48} />
+          <div>
+            <h1>Tolaris Diagnóstico</h1>
+            <p className="sub">Triagem rápida de exames de sangue para a medicina do trabalho</p>
+          </div>
+        </div>
+        <form className="card" onSubmit={submit}>
+          <h2 style={{ marginBottom: 14 }}>{mode === "login" ? "Entrar na sua conta" : "Criar conta"}</h2>
           <input type="email" required autoComplete="email" placeholder="E-mail" value={email} onChange={(e) => setEmail(e.target.value)} aria-label="E-mail" />
           <input
             type="password"
@@ -61,24 +67,25 @@ export function AuthForm() {
             aria-label="Senha"
           />
           <button className="primary" disabled={busy}>{busy ? "Aguarde…" : mode === "login" ? "Entrar" : "Criar conta"}</button>
-        </div>
-        {error && <p className="err" role="alert">{error}</p>}
-        {info && <p role="status">{info}</p>}
-        <p className="muted">
-          {mode === "login" ? "Ainda não tem conta? " : "Já tem conta? "}
-          <a
-            href="#"
-            onClick={(e) => {
-              e.preventDefault();
-              setMode(mode === "login" ? "signup" : "login");
-              setError("");
-              setInfo("");
-            }}
-          >
-            {mode === "login" ? "Criar conta" : "Entrar"}
-          </a>
-        </p>
-      </form>
+          {error && <p className="err" role="alert">{error}</p>}
+          {info && <p role="status">{info}</p>}
+          <p className="muted" style={{ textAlign: "center" }}>
+            {mode === "login" ? "Ainda não tem conta? " : "Já tem conta? "}
+            <a
+              href="#"
+              onClick={(e) => {
+                e.preventDefault();
+                setMode(mode === "login" ? "signup" : "login");
+                setError("");
+                setInfo("");
+              }}
+            >
+              {mode === "login" ? "Criar conta" : "Entrar"}
+            </a>
+          </p>
+        </form>
+        <p className="muted" style={{ textAlign: "center" }}>Os laudos dos pacientes nunca são enviados nem armazenados.</p>
+      </div>
     </main>
   );
 }
