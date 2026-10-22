@@ -10,6 +10,8 @@ localiza cada exame e mostra um semáforo (verde / laranja / vermelho / cinza = 
 - **Segurança:** exame não localizado fica cinza, nunca verde. O médico confere a origem de cada valor e pode corrigi-lo.
 - Os valores do preset de exemplo são apenas demonstração; não são critério clínico.
 
+- **Tour guiado:** abre sozinho na primeira visita e pode ser revisto em “Ver tour”. Passos em `src/components/tour-steps.tsx`; o componente é `src/components/Tour.tsx` (sem dependências). O laudo fictício carregado pelo tour é removido ao concluir.
+
 ## Desenvolvimento
 ```bash
 npm install

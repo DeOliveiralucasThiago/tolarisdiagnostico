@@ -41,7 +41,7 @@ export function Results({ output, catalog, rules, overrides, onOverride }: Props
   return (
     <section className="card">
       <h2>3. Resultado da análise</h2>
-      <div className="summary" aria-live="polite">
+      <div className="summary" aria-live="polite" data-tour="summary">
         <span><i className="dot red" /> {count("red")} acima do limite</span>
         <span><i className="dot orange" /> {count("orange")} para analisar</span>
         <span><i className="dot green" /> {count("green")} dentro do padrão</span>
@@ -51,7 +51,7 @@ export function Results({ output, catalog, rules, overrides, onOverride }: Props
         Confira os valores lidos. Se algum exame não foi localizado (cinza), digite o valor manualmente.
         Ferramenta de apoio à triagem: a decisão clínica é do médico.
       </p>
-      <div className="scroll">
+      <div className="scroll" data-tour="table">
         <table>
           <thead>
             <tr>

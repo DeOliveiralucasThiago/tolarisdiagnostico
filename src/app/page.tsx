@@ -1,13 +1,17 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { PresetEditor } from "@/components/PresetEditor";
+import { Tour } from "@/components/Tour";
+import { makeTourSteps } from "@/components/tour-steps";
 import { Results } from "@/components/Results";
 import { catalogWith, loadCustomExams, saveCustomExams } from "@/lib/custom-exams";
 import { extractResults } from "@/lib/extract";
 import { readPdfInBrowser } from "@/lib/pdf-browser";
 import { DEFAULT_PRESET, loadPresets, savePresets, type Preset } from "@/lib/presets";
 import type { ExamDefinition, ExtractionOutput, TextItem } from "@/lib/types";
+
+const TOUR_KEY = "tolaris.tourSeen.v1";
 
 const SAMPLES = [
   { file: "exemplo-layout-a.pdf", label: "Exemplo layout A" },
@@ -25,7 +29,11 @@ export default function Home() {
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const [over, setOver] = useState(false);
+  const [tourOpen, setTourOpen] = useState(false);
   const loaded = useRef(false);
+  const itemsRef = useRef<TextItem[] | null>(null);
+  const tourLoadedSample = useRef(false);
+  itemsRef.current = items;
 
   useEffect(() => {
     const stored = loadPresets();
@@ -33,6 +41,11 @@ export default function Home() {
     setActiveId(stored[0].id);
     setCustomExams(loadCustomExams());
     loaded.current = true;
+    try {
+      if (!localStorage.getItem(TOUR_KEY)) setTimeout(() => setTourOpen(true), 600);
+    } catch {
+      /* sem armazenamento: não abre sozinho */
+    }
   }, []);
 
   useEffect(() => {
@@ -66,15 +79,47 @@ export default function Home() {
     await openPdf(buf, file);
   };
 
+  const ensureSample = async () => {
+    if (itemsRef.current) return;
+    await loadSample("exemplo-layout-a.pdf");
+    tourLoadedSample.current = true;
+  };
+
+  // estável entre renders: o Tour reage à identidade dos passos
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const tourSteps = useMemo(() => makeTourSteps(ensureSample), []);
+
+  const closeTour = () => {
+    setTourOpen(false);
+    try {
+      localStorage.setItem(TOUR_KEY, "1");
+    } catch {
+      /* ignora */
+    }
+    // não deixa o laudo de exemplo na tela depois do tour
+    if (tourLoadedSample.current) {
+      tourLoadedSample.current = false;
+      setItems(null);
+      setFileName("");
+      setOverrides({});
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    }
+  };
+
   const output: ExtractionOutput | null = items ? extractResults(items, Object.keys(active.rules), catalog) : null;
   const noText = items !== null && items.length === 0;
 
   return (
     <main>
-      <h1>Tolaris Diagnóstico</h1>
-      <p className="sub">Triagem rápida de exames de sangue: encontra cada resultado no laudo e aplica os seus critérios.</p>
+      <div className="header">
+        <div>
+          <h1>Tolaris Diagnóstico</h1>
+          <p className="sub">Triagem rápida de exames de sangue: encontra cada resultado no laudo e aplica os seus critérios.</p>
+        </div>
+        <button onClick={() => setTourOpen(true)}>Ver tour</button>
+      </div>
 
-      <div className="card privacy">
+      <div className="card privacy" data-tour="privacy">
         <strong>Privacidade:</strong> o PDF é lido aqui no seu navegador e <strong>não é enviado nem armazenado</strong>.
         Ao fechar ou trocar o arquivo, os dados do paciente desaparecem. Só as suas faixas (presets) ficam salvas neste navegador.
       </div>
@@ -91,7 +136,7 @@ export default function Home() {
         }}
       />
 
-      <section className="card">
+      <section className="card" data-tour="upload">
         <h2>2. Laudo do paciente</h2>
         <label
           className={`drop${over ? " over" : ""}`}
@@ -141,6 +186,7 @@ export default function Home() {
           onOverride={(id, v) => setOverrides((o) => ({ ...o, [id]: v }))}
         />
       )}
+      {tourOpen && <Tour steps={tourSteps} onClose={closeTour} />}
     </main>
   );
 }

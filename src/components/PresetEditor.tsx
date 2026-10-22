@@ -89,7 +89,7 @@ export function PresetEditor({ presets, activeId, catalog, onChange, customExams
         Escolha os exames que quer analisar e defina a partir de quando o resultado merece análise (laranja) ou está
         acima do limite (vermelho). Deixe em branco o que não usar. Exames sem nenhuma faixa não são avaliados.
       </p>
-      <div className="row" style={{ marginBottom: 12 }}>
+      <div className="row" style={{ marginBottom: 12 }} data-tour="preset">
         <select value={active.id} onChange={(e) => onChange(presets, e.target.value)} aria-label="Preset ativo">
           {presets.map((p) => (
             <option key={p.id} value={p.id}>{p.name}</option>
@@ -115,8 +115,8 @@ export function PresetEditor({ presets, activeId, catalog, onChange, customExams
             {inPreset.length === 0 && (
               <tr><td colSpan={6} className="muted">Nenhum exame neste preset. Use o “+” abaixo para adicionar.</td></tr>
             )}
-            {inPreset.map((exam) => (
-              <tr key={exam.id}>
+            {inPreset.map((exam, i) => (
+              <tr key={exam.id} data-tour={i === 0 ? "rule-row" : undefined}>
                 <td>
                   {exam.name} {exam.unit && <span className="muted">({exam.unit})</span>}
                   {isCustom(exam.id) && <div className="muted">procura por: {exam.aliases.join(", ")}</div>}
@@ -144,7 +144,7 @@ export function PresetEditor({ presets, activeId, catalog, onChange, customExams
         </table>
       </div>
 
-      <div className="row" style={{ marginTop: 12 }}>
+      <div className="row" style={{ marginTop: 12 }} data-tour="add-exam">
         <select value="" onChange={(e) => addExam(e.target.value)} aria-label="Adicionar exame do catálogo">
           <option value="">＋ Adicionar exame do catálogo…</option>
           {available.map((e) => (
