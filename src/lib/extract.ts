@@ -302,7 +302,7 @@ export function extractResults(items: TextItem[], examIds?: string[]): Extractio
       }
     }
 
-    if (labReference && AMBIGUOUS_REFERENCE.test(labReference)) labReference = undefined;
+    if (labReference && AMBIGUOUS_REFERENCE.test(labReference.normalize("NFD").replace(/[\u0300-\u036f]/g, ""))) labReference = undefined;
 
     found.set(label.def.id, {
       examId: label.def.id,
