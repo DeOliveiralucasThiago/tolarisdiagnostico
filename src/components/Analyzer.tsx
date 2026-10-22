@@ -1,31 +1,37 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { IconFile, IconLock, IconUpload, Logo } from "@/components/Icons";
+import { IconLock, IconUpload, Logo } from "@/components/Icons";
+import { PatientsPanel, type PatientRow } from "@/components/PatientsPanel";
 import { PresetEditor } from "@/components/PresetEditor";
 import { SectionHead } from "@/components/SectionHead";
 import { Tour } from "@/components/Tour";
 import { makeTourSteps } from "@/components/tour-steps";
 import { Results } from "@/components/Results";
 import { catalogWith } from "@/lib/custom-exams";
-import { extractResults } from "@/lib/extract";
+import { analyze } from "@/lib/analysis";
+import { filterAndSort } from "@/lib/batch";
+import { ageFrom, formatName, parsePatient, type PatientInfo } from "@/lib/patient";
 import { readPdfInBrowser } from "@/lib/pdf-browser";
 import { DEFAULT_PRESET, newId, type Preset } from "@/lib/presets";
 import type { Storage } from "@/lib/storage";
-import type { ExamDefinition, ExtractionOutput, TextItem } from "@/lib/types";
+import type { ExamDefinition, TextItem } from "@/lib/types";
 
 const TOUR_KEY = "tolaris.tourSeen.v1";
 
-const EXAMPLE_FILE = "exemplo-layout-a.pdf";
+// Três pacientes FICTÍCIOS (cada laudo em um layout diferente) para conhecer a análise em lote.
+const EXAMPLE_FILES = ["paciente-joao.pdf", "paciente-maria.pdf", "paciente-jose.pdf"];
 
-// Variações de layout existem só para desenvolvimento/testes de leitura; o médico vê apenas o exemplo principal.
-const DEV_SAMPLES =
-  process.env.NODE_ENV !== "production"
-    ? [
-        { file: "exemplo-layout-b.pdf", label: "Layout B" },
-        { file: "exemplo-layout-c.pdf", label: "Layout C" },
-      ]
-    : [];
+interface PatientEntry {
+  id: string;
+  fileName: string;
+  items: TextItem[];
+  info: PatientInfo;
+  /** Motivo, quando o PDF não pôde ser analisado. */
+  problem?: string;
+}
+
+const DEFAULT_ORDER = { status: "all", query: "", examId: "", sort: "critical" } as const;
 
 export interface Account {
   email: string;
@@ -45,11 +51,10 @@ export function Analyzer({ storage, account }: Props) {
   const [presets, setPresets] = useState<Preset[]>([DEFAULT_PRESET]);
   const [activeId, setActiveId] = useState(DEFAULT_PRESET.id);
   const [customExams, setCustomExams] = useState<ExamDefinition[]>([]);
-  const [items, setItems] = useState<TextItem[] | null>(null);
-  const [fileName, setFileName] = useState("");
-  const [overrides, setOverrides] = useState<Record<string, string>>({});
-  const [error, setError] = useState("");
-  const [busy, setBusy] = useState(false);
+  const [patients, setPatients] = useState<PatientEntry[]>([]);
+  const [overrides, setOverrides] = useState<Record<string, Record<string, string>>>({});
+  const [expanded, setExpanded] = useState<Set<string>>(new Set());
+  const [progress, setProgress] = useState<{ done: number; total: number } | null>(null);
   const [over, setOver] = useState(false);
   const [tourOpen, setTourOpen] = useState(false);
   const [presetOpen, setPresetOpen] = useState(true);
@@ -58,9 +63,10 @@ export function Analyzer({ storage, account }: Props) {
   const loaded = useRef(false);
   const savedPresets = useRef<Preset[]>([]);
   const savedExams = useRef<ExamDefinition[]>([]);
-  const itemsRef = useRef<TextItem[] | null>(null);
+  const patientsRef = useRef<PatientEntry[]>([]);
+  const rowsRef = useRef<PatientRow[]>([]);
   const tourLoadedSample = useRef(false);
-  itemsRef.current = items;
+  patientsRef.current = patients;
 
   useEffect(() => {
     let cancelled = false;
@@ -119,33 +125,76 @@ export function Analyzer({ storage, account }: Props) {
     return () => clearTimeout(t);
   }, [customExams, storage]);
 
-  const catalog = catalogWith(customExams);
+  const catalog = useMemo(() => catalogWith(customExams), [customExams]);
   const active = presets.find((p) => p.id === activeId) ?? presets[0];
 
-  const openPdf = useCallback(async (source: File | ArrayBuffer, name: string) => {
-    setBusy(true);
-    setError("");
-    try {
-      setItems(await readPdfInBrowser(source));
-      setFileName(name);
-      setOverrides({});
-    } catch {
-      setItems(null);
-      setError("Não foi possível ler este PDF. Verifique se é um laudo digital (não protegido por senha).");
-    } finally {
-      setBusy(false);
+  const addFiles = useCallback(async (sources: { source: File | ArrayBuffer; name: string }[]) => {
+    if (!sources.length) return;
+    setProgress({ done: 0, total: sources.length });
+    const added: PatientEntry[] = [];
+    for (const [i, s] of sources.entries()) {
+      const id = newId();
+      try {
+        const items = await readPdfInBrowser(s.source);
+        added.push(
+          items.length === 0
+            ? { id, fileName: s.name, items, info: {}, problem: "Sem texto selecionável (provavelmente é um scan ou foto)." }
+            : { id, fileName: s.name, items, info: parsePatient(items) },
+        );
+      } catch {
+        added.push({ id, fileName: s.name, items: [], info: {}, problem: "Não foi possível ler este PDF (protegido por senha ou corrompido?)." });
+      }
+      setProgress({ done: i + 1, total: sources.length });
     }
+    setPatients((prev) => [...prev, ...added]);
+    setProgress(null);
   }, []);
 
-  const loadSample = async (file: string) => {
-    const buf = await (await fetch(`/samples/${file}`)).arrayBuffer();
-    await openPdf(buf, file);
+  const addFileList = (files: FileList | File[]) =>
+    addFiles(Array.from(files).filter((f) => f.type === "application/pdf" || /\.pdf$/i.test(f.name)).map((f) => ({ source: f, name: f.name })));
+
+  const clearAll = useCallback(() => {
+    setPatients([]);
+    setOverrides({});
+    setExpanded(new Set());
+  }, []);
+
+  const loadExamples = useCallback(async () => {
+    clearAll();
+    const sources = await Promise.all(
+      EXAMPLE_FILES.map(async (file) => ({ source: await (await fetch(`/samples/${file}`)).arrayBuffer(), name: file })),
+    );
+    await addFiles(sources);
+  }, [addFiles, clearAll]);
+
+  const removePatient = (id: string) => {
+    setPatients((ps) => ps.filter((p) => p.id !== id));
+    setOverrides(({ [id]: _drop, ...rest }) => rest);
+    setExpanded((e) => {
+      const n = new Set(e);
+      n.delete(id);
+      return n;
+    });
   };
 
+  const toggle = (id: string) =>
+    setExpanded((e) => {
+      const n = new Set(e);
+      if (n.has(id)) n.delete(id);
+      else n.add(id);
+      return n;
+    });
+
   const ensureSample = async () => {
-    if (itemsRef.current) return;
-    await loadSample(EXAMPLE_FILE);
+    if (patientsRef.current.length) return;
+    await loadExamples();
     tourLoadedSample.current = true;
+  };
+
+  const expandFirst = async () => {
+    const first = filterAndSort(rowsRef.current, DEFAULT_ORDER).find((p) => p.analysis);
+    if (first) setExpanded(new Set([first.id]));
+    await new Promise((r) => setTimeout(r, 150));
   };
 
   // estável entre renders: o Tour reage à identidade dos passos
@@ -154,6 +203,7 @@ export function Analyzer({ storage, account }: Props) {
     () =>
       makeTourSteps({
         ensureSample,
+        expandFirst,
         openPreset: async () => {
           setPresetOpen(true);
           await new Promise((r) => setTimeout(r, 120));
@@ -169,18 +219,41 @@ export function Analyzer({ storage, account }: Props) {
     } catch {
       /* ignora */
     }
-    // não deixa o laudo de exemplo na tela depois do tour
+    // não deixa os laudos de exemplo na tela depois do tour
     if (tourLoadedSample.current) {
       tourLoadedSample.current = false;
-      setItems(null);
-      setFileName("");
-      setOverrides({});
+      clearAll();
       window.scrollTo({ top: 0, behavior: "smooth" });
     }
   };
 
-  const output: ExtractionOutput | null = items ? extractResults(items, Object.keys(active.rules), catalog) : null;
-  const noText = items !== null && items.length === 0;
+  const rows: PatientRow[] = useMemo(
+    () =>
+      patients.map((p) => {
+        const age = p.info.birth ? ageFrom(p.info.birth) : null;
+        return {
+          id: p.id,
+          label: p.info.name ? formatName(p.info.name) : p.fileName.replace(/\.pdf$/i, ""),
+          fileName: p.fileName,
+          subtitle: age != null ? `${age} anos` : "",
+          problem: p.problem,
+          analysis: p.problem ? null : analyze(p.items, active.rules, catalog, overrides[p.id]),
+        };
+      }),
+    [patients, active.rules, catalog, overrides],
+  );
+  rowsRef.current = rows;
+
+  const exams = Object.keys(active.rules)
+    .map((id) => catalog.find((e) => e.id === id))
+    .filter((e): e is ExamDefinition => !!e)
+    .map((e) => ({ id: e.id, name: e.name }));
+
+  const setOverride = (patientId: string, examId: string, value: string) =>
+    setOverrides((o) => ({ ...o, [patientId]: { ...(o[patientId] ?? {}), [examId]: value } }));
+
+  const busy = progress !== null;
+  const single = rows.length === 1 ? rows[0] : null;
 
   if (!ready) {
     return (
@@ -235,7 +308,7 @@ export function Analyzer({ storage, account }: Props) {
       />
 
       <section className="card" data-tour="upload">
-        <SectionHead n={2} title="Laudo do paciente" hint="Envie o PDF do exame; a ferramenta encontra cada resultado pelo nome do exame." />
+        <SectionHead n={2} title="Laudos dos pacientes" hint="Envie um ou vários PDFs de uma vez (um laudo por paciente). A ferramenta encontra cada resultado pelo nome do exame." />
         <label
           className={`drop${over ? " over" : ""}`}
           onDragOver={(e) => { e.preventDefault(); setOver(true); }}
@@ -243,49 +316,62 @@ export function Analyzer({ storage, account }: Props) {
           onDrop={(e) => {
             e.preventDefault();
             setOver(false);
-            const f = e.dataTransfer.files[0];
-            if (f) openPdf(f, f.name);
+            addFileList(e.dataTransfer.files);
           }}
         >
           <span className="drop-icon"><IconUpload /></span>
-          <strong>{busy ? "Lendo o laudo…" : "Arraste o PDF aqui"}</strong>
-          <span className="muted">ou clique para escolher o arquivo</span>
+          <strong>{busy ? `Lendo laudos… ${progress.done} de ${progress.total}` : "Arraste os PDFs aqui"}</strong>
+          <span className="muted">{busy ? "Aguarde, a leitura acontece no seu computador." : "ou clique para escolher um ou vários arquivos"}</span>
+          {busy && <progress className="bar" value={progress.done} max={progress.total} />}
           <input
             type="file"
             accept="application/pdf"
+            multiple
             hidden
             onChange={(e) => {
-              const f = e.target.files?.[0];
-              if (f) openPdf(f, f.name);
+              if (e.target.files) addFileList(e.target.files);
               e.target.value = "";
             }}
           />
         </label>
         <div className="row" style={{ marginTop: 12 }}>
-          <button className="small" onClick={() => loadSample(EXAMPLE_FILE)}>Testar com um laudo de exemplo</button>
-          {DEV_SAMPLES.map((s) => (
-            <button key={s.file} className="small ghost" onClick={() => loadSample(s.file)}>{s.label}</button>
-          ))}
+          <button className="small" onClick={loadExamples} disabled={busy}>Testar com 3 laudos de exemplo</button>
           <span className="muted">Nesta versão são lidos laudos digitais (PDF com texto), não fotos nem scans.</span>
         </div>
-        {fileName && (
-          <span className="file-pill"><IconFile width={16} height={16} /> {fileName}</span>
-        )}
-        {error && <p className="err">{error}</p>}
-        {noText && (
-          <p className="err">
-            Este PDF não tem texto selecionável (provavelmente é um scan ou foto). Nesta versão só laudos digitais são lidos.
-          </p>
-        )}
       </section>
 
-      {output && !noText && (
+      {single && single.analysis && (
         <Results
-          output={output}
-          catalog={catalog}
-          rules={active.rules}
+          analysis={single.analysis}
+          overrides={overrides[single.id] ?? {}}
+          onOverride={(examId, v) => setOverride(single.id, examId, v)}
+          header={
+            <div className="patient-head">
+              <div>
+                <div className="patient-name big">{single.label}</div>
+                <div className="muted">{[single.subtitle, single.fileName].filter(Boolean).join(" · ")}</div>
+              </div>
+              <button className="small ghost" onClick={() => removePatient(single.id)}>Remover</button>
+            </div>
+          }
+        />
+      )}
+      {single && !single.analysis && (
+        <section className="card">
+          <p className="err" style={{ margin: 0 }}>{single.fileName}: {single.problem}</p>
+          <button className="small" style={{ marginTop: 10 }} onClick={() => removePatient(single.id)}>Remover</button>
+        </section>
+      )}
+      {rows.length > 1 && (
+        <PatientsPanel
+          patients={rows}
+          exams={exams}
+          expanded={expanded}
+          onToggle={toggle}
           overrides={overrides}
-          onOverride={(id, v) => setOverrides((o) => ({ ...o, [id]: v }))}
+          onOverride={setOverride}
+          onRemove={removePatient}
+          onClear={clearAll}
         />
       )}
       <p className="app-foot">Ferramenta de apoio à triagem. A interpretação e a decisão clínica são sempre do médico.</p>

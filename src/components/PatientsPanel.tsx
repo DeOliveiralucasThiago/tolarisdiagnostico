@@ -1,0 +1,193 @@
+"use client";
+
+import { useMemo, useState } from "react";
+import { IconX } from "./Icons";
+import { Results } from "./Results";
+import { SectionHead } from "./SectionHead";
+import type { Analysis, AnalysisRow } from "@/lib/analysis";
+import { filterAndSort, type BatchFilters, type BatchItem, type StatusFilter } from "@/lib/batch";
+import { STATUS_LABEL } from "@/lib/status";
+import type { Status } from "@/lib/types";
+
+export interface PatientRow extends BatchItem {
+  /** "33 anos" etc. */
+  subtitle: string;
+  /** Motivo, quando o PDF não pôde ser analisado. */
+  problem?: string;
+}
+
+interface Props {
+  patients: PatientRow[];
+  /** Exames configurados no preset, para o filtro por exame. */
+  exams: { id: string; name: string }[];
+  expanded: Set<string>;
+  onToggle: (id: string) => void;
+  overrides: Record<string, Record<string, string>>;
+  onOverride: (patientId: string, examId: string, value: string) => void;
+  onRemove: (id: string) => void;
+  onClear: () => void;
+}
+
+const DEFAULT_FILTERS: BatchFilters = { status: "all", query: "", examId: "", sort: "critical" };
+
+const CHIPS: { value: StatusFilter; label: string }[] = [
+  { value: "all", label: "Todos" },
+  { value: "red", label: "Acima do limite" },
+  { value: "orange", label: "Para analisar" },
+  { value: "green", label: "Tudo normal" },
+  { value: "unknown", label: "Não localizados" },
+];
+
+const STATS: { status: Status; label: string }[] = [
+  { status: "red", label: "com exames acima do limite" },
+  { status: "orange", label: "para analisar" },
+  { status: "unknown", label: "com exames não localizados" },
+  { status: "green", label: "tudo dentro do padrão" },
+];
+
+function attentionText(a: Analysis): string {
+  const flagged = a.rows.filter((r: AnalysisRow) => r.status === "red" || r.status === "orange");
+  if (!flagged.length) return "—";
+  const fmt = (r: AnalysisRow) => `${r.exam.name} ${String(r.value).replace(".", ",")}`;
+  const shown = flagged.slice(0, 3).map(fmt).join(" · ");
+  return flagged.length > 3 ? `${shown} · +${flagged.length - 3}` : shown;
+}
+
+export function PatientsPanel({ patients, exams, expanded, onToggle, overrides, onOverride, onRemove, onClear }: Props) {
+  const [filters, setFilters] = useState<BatchFilters>(DEFAULT_FILTERS);
+  const visible = useMemo(() => filterAndSort(patients, filters), [patients, filters]);
+
+  const byWorst = (s: Status) => patients.filter((p) => p.analysis?.worst === s).length;
+  const unreadable = patients.filter((p) => !p.analysis).length;
+  const chipCount = (v: StatusFilter) => filterAndSort(patients, { ...DEFAULT_FILTERS, status: v }).length;
+  const filtered = filters.status !== "all" || filters.query !== "" || filters.examId !== "";
+
+  return (
+    <section className="card">
+      <SectionHead
+        n={3}
+        title={`Resultado da análise · ${patients.length} pacientes`}
+        hint="Do mais crítico ao mais tranquilo. Abra um paciente para conferir os valores e corrigir, se necessário."
+        right={<button className="small" onClick={onClear}>Limpar tudo</button>}
+      />
+
+      <div className="stats" aria-live="polite" data-tour="summary">
+        {STATS.map((s) => (
+          <div key={s.status} className={`stat ${s.status}`}>
+            <b>{byWorst(s.status)}</b>
+            <span>{s.label}</span>
+          </div>
+        ))}
+      </div>
+
+      <div className="filters" data-tour="filters">
+        <div className="chips" role="group" aria-label="Filtrar por situação">
+          {CHIPS.map((c) => (
+            <button
+              key={c.value}
+              className={`chip-btn${filters.status === c.value ? " on" : ""}`}
+              aria-pressed={filters.status === c.value}
+              onClick={() => setFilters((f) => ({ ...f, status: c.value }))}
+            >
+              {c.label} <span className="count">{chipCount(c.value)}</span>
+            </button>
+          ))}
+        </div>
+        <div className="row">
+          <input
+            type="text"
+            placeholder="Buscar paciente…"
+            value={filters.query}
+            onChange={(e) => setFilters((f) => ({ ...f, query: e.target.value }))}
+            aria-label="Buscar paciente"
+          />
+          <select value={filters.examId} onChange={(e) => setFilters((f) => ({ ...f, examId: e.target.value }))} aria-label="Filtrar por exame alterado">
+            <option value="">Qualquer exame</option>
+            {exams.map((e) => (
+              <option key={e.id} value={e.id}>Alterado: {e.name}</option>
+            ))}
+          </select>
+          <select value={filters.sort} onChange={(e) => setFilters((f) => ({ ...f, sort: e.target.value as BatchFilters["sort"] }))} aria-label="Ordenar">
+            <option value="critical">Mais críticos primeiro</option>
+            <option value="name">Nome (A–Z)</option>
+          </select>
+          {filtered && <button className="small ghost" onClick={() => setFilters(DEFAULT_FILTERS)}>Limpar filtros</button>}
+        </div>
+      </div>
+
+      <div className="scroll" data-tour="table">
+        <table className="patients-table">
+          <thead>
+            <tr>
+              <th>Paciente</th><th>Situação geral</th><th>Exames</th><th>Para atenção</th><th></th>
+            </tr>
+          </thead>
+          <tbody>
+            {visible.length === 0 && (
+              <tr><td colSpan={5} className="muted">Nenhum paciente corresponde aos filtros.</td></tr>
+            )}
+            {visible.map((p, idx) => {
+              const a = p.analysis;
+              const isOpen = expanded.has(p.id);
+              const row = p as PatientRow;
+              return [
+                <tr key={p.id} className={a ? `row-${a.worst}` : "row-unknown"}>
+                  <td>
+                    <div className="patient-name">{p.label}</div>
+                    <div className="muted">{[row.subtitle, p.fileName].filter(Boolean).join(" · ")}</div>
+                  </td>
+                  <td>
+                    {a ? (
+                      <span className={`pill ${a.worst}`}><i className={`dot ${a.worst}`} />{a.worst === "unknown" ? "Exames não localizados" : STATUS_LABEL[a.worst]}</span>
+                    ) : (
+                      <span className="pill unknown"><i className="dot unknown" />Não lido</span>
+                    )}
+                  </td>
+                  <td>
+                    {a ? (
+                      <span className="mini-counts" title="vermelhos · laranjas · verdes · não localizados">
+                        <span className="mc red">{a.counts.red}</span>
+                        <span className="mc orange">{a.counts.orange}</span>
+                        <span className="mc green">{a.counts.green}</span>
+                        <span className="mc unknown">{a.counts.unknown}</span>
+                      </span>
+                    ) : (
+                      <span className="muted">—</span>
+                    )}
+                  </td>
+                  <td className="attention">{a ? attentionText(a) : <span className="err">{row.problem}</span>}</td>
+                  <td style={{ whiteSpace: "nowrap", textAlign: "right" }}>
+                    {a && (
+                      <button className="small" onClick={() => onToggle(p.id)} aria-expanded={isOpen}>
+                        {isOpen ? "Ocultar" : "Ver detalhes"}
+                      </button>
+                    )}{" "}
+                    <button className="small ghost" onClick={() => onRemove(p.id)} title="Remover da lista" aria-label={`Remover ${p.label}`}>
+                      <IconX width={14} height={14} />
+                    </button>
+                  </td>
+                </tr>,
+                a && isOpen ? (
+                  <tr key={`${p.id}-detail`} className="detail-row">
+                    <td colSpan={5} data-tour={idx === 0 ? "detail" : undefined}>
+                      <Results
+                        embedded
+                        analysis={a}
+                        overrides={overrides[p.id] ?? {}}
+                        onOverride={(examId, v) => onOverride(p.id, examId, v)}
+                      />
+                    </td>
+                  </tr>
+                ) : null,
+              ];
+            })}
+          </tbody>
+        </table>
+      </div>
+      <p className="muted disclaimer">
+        {unreadable > 0 && `${unreadable} arquivo(s) não puderam ser lidos. `}
+        Exames não localizados nunca aparecem como verdes. Os dados ficam só neste navegador e somem ao recarregar a página.
+      </p>
+    </section>
+  );
+}

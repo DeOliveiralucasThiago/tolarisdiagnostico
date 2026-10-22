@@ -83,3 +83,37 @@ it("exame personalizado criado pelo médico (ex.: Vitamina C) é encontrado pelo
   expect(out.results[0]).toMatchObject({ examId: vitC.id, value: 0.8, unit: "mg/dL" });
   expect(extractResults(items, [vitC.id], [...EXAMS, vitC]).notFound).toEqual([]);
 });
+
+describe("laudos fictícios de pacientes (lote de demonstração)", () => {
+  it("lê nome, nascimento e a análise de João, Maria e José, em layouts diferentes", async () => {
+    const { parsePatient } = await import("@/lib/patient");
+    const { analyze } = await import("@/lib/analysis");
+    const { DEFAULT_PRESET } = await import("@/lib/presets");
+    const { EXAMS } = await import("@/lib/exams");
+    const run = async (file: string) => {
+      const items = await itemsFromSample(file);
+      return { info: parsePatient(items), a: analyze(items, DEFAULT_PRESET.rules, EXAMS) };
+    };
+    const joao = await run("paciente-joao.pdf");
+    const maria = await run("paciente-maria.pdf");
+    const jose = await run("paciente-jose.pdf");
+    expect(joao.info).toEqual({ name: "JOÃO DA SILVA", birth: "12/05/1985" });
+    expect(maria.info).toEqual({ name: "MARIA SOUZA", birth: "03/11/1990" });
+    expect(jose.info).toEqual({ name: "JOSÉ SANTOS", birth: "21/08/1978" });
+    expect([joao.a.worst, maria.a.worst, jose.a.worst]).toEqual(["green", "red", "red"]);
+    expect(joao.a.counts).toMatchObject({ red: 0, orange: 0, unknown: 0, green: 12 });
+    expect(maria.a.counts.red).toBe(3); // colesterol total, LDL, triglicerídeos
+    expect(jose.a.counts.red).toBe(1); // glicose 131
+  });
+});
+
+it("tira o rótulo 'Valor de referência:' da faixa do laboratório, com ou sem acento composto", () => {
+  const mk = (str: string, y: number, x = 50) => ({ str, x, y, width: 60, page: 1 });
+  for (const rotulo of ["Valor de referência:", "Valor de referência:", "Valor de referencia:"]) {
+    const out = extractResults(
+      [mk("POTASSIO", 700), mk("RESULTADO 4,6 mEq/L", 690), mk(`${rotulo} DE 3,5 A 5,1 mEq/L`, 680)],
+      ["potassio"],
+    );
+    expect(out.results[0].labReference).toBe("DE 3,5 A 5,1 mEq/L");
+  }
+});

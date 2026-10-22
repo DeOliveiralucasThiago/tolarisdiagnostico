@@ -113,6 +113,26 @@ details summary { cursor: pointer; color: var(--brand); font-size: 13px; }
 .disclaimer { margin-top: 12px; }
 .app-foot { text-align: center; color: var(--muted); font-size: 12.5px; margin-top: 28px; }
 
+/* análise em lote */
+.filters { display: grid; gap: 10px; margin-bottom: 14px; }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.chip-btn { border-radius: 999px; padding: 5px 12px; font-size: 13px; }
+.chip-btn.on { background: var(--brand); border-color: var(--brand); color: var(--on-brand); }
+.chip-btn .count { display: inline-block; min-width: 20px; padding: 0 6px; border-radius: 999px; background: var(--gray-soft); color: var(--text); font-size: 12px; font-weight: 600; }
+.chip-btn.on .count { background: rgba(255, 255, 255, .25); color: inherit; }
+.patients-table { min-width: 760px; }
+.patient-name { font-weight: 600; }
+.patient-name.big { font-size: 18px; }
+.patient-head { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-bottom: 14px; padding-bottom: 12px; border-bottom: 1px solid var(--line); }
+.attention { font-size: 13px; max-width: 320px; }
+.mini-counts { display: inline-flex; gap: 4px; }
+.mc { min-width: 24px; padding: 1px 6px; border-radius: 6px; font-size: 12px; font-weight: 700; text-align: center; }
+.mc.red { background: var(--red-soft); color: var(--red); } .mc.orange { background: var(--orange-soft); color: var(--orange); }
+.mc.green { background: var(--green-soft); color: var(--green); } .mc.unknown { background: var(--gray-soft); color: var(--gray); }
+.detail-row > td { background: var(--surface-2); padding: 14px; }
+.detail-body .stats { margin-bottom: 10px; }
+progress.bar { width: min(320px, 90%); height: 8px; accent-color: var(--brand); }
+
 /* login */
 .auth-split { min-height: 100vh; display: grid; grid-template-columns: minmax(0, 1.05fr) minmax(0, 1fr); }
 .auth-aside { background: radial-gradient(1200px 600px at 20% 10%, #14474a 0%, transparent 60%), linear-gradient(160deg, #0b2430 0%, #0c3138 55%, #0f4a4a 100%); color: #dcebea; display: flex; align-items: center; justify-content: center; padding: 48px; }

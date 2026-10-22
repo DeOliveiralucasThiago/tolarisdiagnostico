@@ -296,7 +296,7 @@ export function extractResults(items: TextItem[], examIds?: string[], catalog: E
         if (!next || next.page !== row.page || matchLabel(next, aliases)) break;
         const first = next.tokens[0]?.norm;
         if (first === "vr" || first === "valor" || first === "valores" || first?.startsWith("refer")) {
-          const text = next.text.replace(/^(valores?\s+de\s+refer[eê]ncia|valor\s+de|valores?|vr|refer[eê]ncia)\s*:?\s*/i, "").slice(0, 90);
+          const text = next.text.replace(/^(valor(?:es)?\s+de\s+refer\S*|valor\s+de|valor(?:es)?|vr|refer\S*)\s*:?\s*/i, "").slice(0, 90);
           labReference = text;
           break;
         }

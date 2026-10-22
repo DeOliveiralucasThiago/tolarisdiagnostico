@@ -1,19 +1,22 @@
 "use client";
 
 import { SectionHead } from "./SectionHead";
-import { evaluate, STATUS_LABEL, STATUS_ORDER } from "@/lib/status";
-import type { ExamDefinition, ExtractionOutput, Rule, Status } from "@/lib/types";
+import type { Analysis } from "@/lib/analysis";
+import { STATUS_LABEL } from "@/lib/status";
+import type { Rule, Status } from "@/lib/types";
 
 interface Props {
-  output: ExtractionOutput;
-  catalog: ExamDefinition[];
-  rules: Record<string, Rule>;
+  analysis: Analysis;
   /** Valores corrigidos/digitados pelo médico, por exame. */
   overrides: Record<string, string>;
   onOverride: (examId: string, value: string) => void;
+  /** Dentro da lista de pacientes: sem cartão e sem título de seção. */
+  embedded?: boolean;
+  /** Cabeçalho do paciente (modo de um único laudo). */
+  header?: React.ReactNode;
 }
 
-function describeRule(rule: Rule): string {
+export function describeRule(rule: Rule): string {
   const parts: string[] = [];
   if (rule.attentionFrom != null) parts.push(`laranja ≥ ${rule.attentionFrom}`);
   if (rule.attentionBelow != null) parts.push(`laranja < ${rule.attentionBelow}`);
@@ -29,39 +32,21 @@ const STATS: { status: Status; label: string }[] = [
   { status: "unknown", label: "não localizados" },
 ];
 
-export function Results({ output, catalog, rules, overrides, onOverride }: Props) {
-  const examById = new Map(catalog.map((e) => [e.id, e]));
-  const byId = new Map(output.results.map((r) => [r.examId, r]));
-  const examIds = Object.keys(rules).filter((id) => examById.has(id));
+export function Results({ analysis, overrides, onOverride, embedded = false, header }: Props) {
+  const { rows, counts } = analysis;
+  const tour = (name: string) => (embedded ? undefined : name);
 
-  const rows = examIds
-    .map((id) => {
-      const found = byId.get(id);
-      const override = overrides[id];
-      const value = override !== undefined && override !== "" ? Number(override.replace(",", ".")) : found?.value ?? null;
-      const status = evaluate(value, rules[id]);
-      return { id, exam: examById.get(id)!, found, value, status };
-    })
-    .sort((a, b) => STATUS_ORDER[a.status] - STATUS_ORDER[b.status]);
-
-  const count = (s: Status) => rows.filter((r) => r.status === s).length;
-
-  return (
-    <section className="card">
-      <SectionHead
-        n={3}
-        title="Resultado da análise"
-        hint="Do mais crítico ao mais tranquilo. Confira os valores lidos e corrija se necessário."
-      />
-      <div className="stats" aria-live="polite" data-tour="summary">
+  const body = (
+    <>
+      <div className="stats" aria-live="polite" data-tour={tour("summary")}>
         {STATS.map((s) => (
           <div key={s.status} className={`stat ${s.status}`}>
-            <b>{count(s.status)}</b>
+            <b>{counts[s.status]}</b>
             <span>{s.label}</span>
           </div>
         ))}
       </div>
-      <div className="scroll" data-tour="table">
+      <div className="scroll" data-tour={tour("table")}>
         <table className="results-table">
           <thead>
             <tr>
@@ -69,7 +54,7 @@ export function Results({ output, catalog, rules, overrides, onOverride }: Props
             </tr>
           </thead>
           <tbody>
-            {rows.map(({ id, exam, found, status }) => (
+            {rows.map(({ id, exam, rule, found, status }) => (
               <tr key={id} className={`row-${status}`}>
                 <td>
                   <span className={`pill ${status}`} title={STATUS_LABEL[status]}><i className={`dot ${status}`} /><span className="pill-text">{STATUS_LABEL[status]}</span></span>
@@ -89,7 +74,7 @@ export function Results({ output, catalog, rules, overrides, onOverride }: Props
                   {found?.qualifier && <span className="unit">({found.raw})</span>}
                 </td>
                 <td className="muted">{found?.labReference ?? "—"}</td>
-                <td className="muted">{describeRule(rules[id])}</td>
+                <td className="muted">{describeRule(rule)}</td>
                 <td>
                   {found ? (
                     <details>
@@ -108,6 +93,16 @@ export function Results({ output, catalog, rules, overrides, onOverride }: Props
       <p className="muted disclaimer">
         Exames não localizados nunca aparecem como verdes. Se um valor foi lido errado, digite o correto no campo.
       </p>
+    </>
+  );
+
+  if (embedded) return <div className="detail-body">{body}</div>;
+
+  return (
+    <section className="card">
+      <SectionHead n={3} title="Resultado da análise" hint="Do mais crítico ao mais tranquilo. Confira os valores lidos e corrija se necessário." />
+      {header}
+      {body}
     </section>
   );
 }

@@ -4,7 +4,7 @@ const Dot = ({ c }: { c: "green" | "orange" | "red" | "unknown" }) => (
   <i className={`dot ${c}`} style={{ width: 12, height: 12, marginRight: 6 }} />
 );
 
-export function makeTourSteps({ ensureSample, openPreset }: { ensureSample: () => Promise<void>; openPreset: () => Promise<void> }): TourStep[] {
+export function makeTourSteps({ ensureSample, openPreset, expandFirst }: { ensureSample: () => Promise<void>; openPreset: () => Promise<void>; expandFirst: () => Promise<void> }): TourStep[] {
   return [
     {
       title: "Bem-vindo ao Tolaris Diagnóstico",
@@ -59,51 +59,58 @@ export function makeTourSteps({ ensureSample, openPreset }: { ensureSample: () =
     },
     {
       target: "upload",
-      title: "2. Envie o laudo em PDF",
+      title: "2. Envie os laudos em PDF",
       body: (
         <>
-          <p>Arraste o PDF do paciente ou clique para escolher. A ferramenta encontra cada exame <strong>pelo nome</strong>, mesmo que cada laboratório organize o laudo de um jeito.</p>
-          <p>Sem laudo à mão, use os botões de <strong>PDFs fictícios</strong> para testar. Nesta versão são lidos laudos digitais; scans e fotos ainda não.</p>
+          <p>Arraste <strong>vários PDFs de uma vez</strong> (um por paciente) ou clique para escolher. A ferramenta encontra cada exame <strong>pelo nome</strong>, mesmo que cada laboratório organize o laudo de um jeito.</p>
+          <p>Sem laudos à mão, use o botão de <strong>laudos de exemplo</strong>. Nesta versão são lidos laudos digitais; scans e fotos ainda não.</p>
         </>
       ),
     },
     {
       target: "summary",
       before: ensureSample,
-      title: "3. Veja o semáforo",
+      title: "3. Veja todos os pacientes de uma vez",
       body: (
         <>
-          <p>Carregamos um laudo fictício para você ver. O resumo mostra, de uma vez:</p>
+          <p>Carregamos 3 laudos fictícios (João, Maria e José). O resumo mostra quantos pacientes estão em cada situação:</p>
           <ul>
-            <li><Dot c="red" /> acima do limite que você definiu</li>
-            <li><Dot c="orange" /> requer a sua análise</li>
-            <li><Dot c="green" /> dentro do padrão</li>
-            <li><Dot c="unknown" /> não localizado no laudo</li>
+            <li><Dot c="red" /> com exame acima do limite que você definiu</li>
+            <li><Dot c="orange" /> para a sua análise</li>
+            <li><Dot c="unknown" /> com exame não localizado no laudo</li>
+            <li><Dot c="green" /> tudo dentro do padrão</li>
           </ul>
         </>
       ),
     },
     {
-      target: "table",
-      title: "Do mais crítico ao mais tranquilo",
+      target: "filters",
+      title: "Filtre e encontre quem importa",
       body: (
         <>
-          <p>Os exames vêm ordenados: vermelhos primeiro, verdes por último. Cada linha mostra:</p>
-          <ul>
-            <li>o resultado lido (e a faixa de referência do laboratório, quando clara);</li>
-            <li>os seus critérios, para você lembrar da regra aplicada;</li>
-            <li><strong>Origem</strong>: clique para ver a linha do PDF de onde o valor veio e conferir rapidamente.</li>
-          </ul>
+          <p>Use os botões para ver só quem está <strong>acima do limite</strong>, <strong>para analisar</strong> ou <strong>tudo normal</strong>.</p>
+          <p>Também dá para buscar um paciente pelo nome, ver só quem tem um <strong>exame específico alterado</strong> (ex.: glicose) e ordenar por criticidade ou por nome.</p>
         </>
       ),
     },
     {
       target: "table",
-      title: "Confira e corrija quando precisar",
+      title: "Um paciente por linha",
       body: (
         <>
-          <p>Se um valor foi lido errado, ou um exame ficou <strong>cinza (não localizado)</strong>, digite o valor no campo e o semáforo se atualiza na hora.</p>
-          <p>Um exame não localizado <strong>nunca</strong> aparece como verde. A ferramenta é um apoio à triagem: a decisão clínica é sempre do médico.</p>
+          <p>Cada linha mostra o nome (lido do próprio laudo), a idade, a situação geral e <strong>quais exames precisam de atenção</strong>, já com o valor. Os mais críticos aparecem primeiro.</p>
+          <p>Os números coloridos contam os exames: vermelhos, laranjas, verdes e não localizados.</p>
+        </>
+      ),
+    },
+    {
+      target: "detail",
+      before: expandFirst,
+      title: "Abra o paciente, confira e corrija",
+      body: (
+        <>
+          <p>Em <strong>Ver detalhes</strong> você vê todos os exames daquele paciente, com a faixa do laboratório, os seus critérios e a <strong>origem</strong> de cada valor no PDF.</p>
+          <p>Se um valor foi lido errado ou ficou <strong>cinza (não localizado)</strong>, digite o correto e o semáforo se atualiza na hora. Um exame não localizado <strong>nunca</strong> aparece como verde. A decisão clínica é sempre do médico.</p>
         </>
       ),
     },
@@ -111,7 +118,7 @@ export function makeTourSteps({ ensureSample, openPreset }: { ensureSample: () =
       title: "Pronto!",
       body: (
         <>
-          <p>Agora é só ajustar seus presets e enviar os laudos. O laudo de exemplo será removido ao concluir.</p>
+          <p>Agora é só ajustar seus critérios e enviar os laudos dos pacientes. Os laudos de exemplo serão removidos ao concluir.</p>
           <p className="muted">Para rever este tour, use o botão “Ver tour” no topo da página.</p>
         </>
       ),
