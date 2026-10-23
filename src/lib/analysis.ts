@@ -29,6 +29,8 @@ export interface SourceFile {
   items: TextItem[];
   /** Texto obtido por OCR (aplica nomes aproximados e o alerta de valor suspeito). */
   ocr?: boolean;
+  /** Segunda leitura do OCR: quando diverge da primeira, o valor é marcado para conferência. */
+  altItems?: TextItem[];
 }
 
 /**
@@ -46,11 +48,17 @@ export function analyzeFiles(
   const examById = new Map(catalog.map((e) => [e.id, e]));
   const ids = Object.keys(rules).filter((id) => examById.has(id));
   const perFile = files.map((f) => new Map(extractResults(f.items, ids, catalog, { fuzzy: f.ocr }).results.map((r) => [r.examId, r])));
+  const altFile = files.map((f) => (f.altItems ? new Map(extractResults(f.altItems, ids, catalog, { fuzzy: true }).results.map((r) => [r.examId, r])) : null));
   const multi = files.length > 1;
 
   const rows = ids
     .map((id) => {
-      const hits = perFile.flatMap((m, i) => (m.has(id) ? [{ r: m.get(id)!, file: files[i].fileName, ocr: !!files[i].ocr }] : []));
+      let hits = perFile.flatMap((m, i) => (m.has(id) ? [{ r: m.get(id)!, file: files[i].fileName, ocr: !!files[i].ocr, i, recovered: false }] : []));
+      // OCR: se a primeira leitura não achou o exame mas a segunda achou, aproveita a segunda (e pede conferência)
+      if (!hits.length) {
+        const i = altFile.findIndex((m) => m?.has(id));
+        if (i >= 0) hits = [{ r: altFile[i]!.get(id)!, file: files[i].fileName, ocr: true, i, recovered: true }];
+      }
       const first = hits[0];
       const found = first ? { ...first.r, source: { ...first.r.source, file: multi ? first.file : undefined } } : undefined;
       const alternatives = first
@@ -59,7 +67,9 @@ export function analyzeFiles(
       const override = overrides[id];
       const value = override !== undefined && override !== "" ? Number(override.replace(",", ".")) : found?.value ?? null;
       const typed = override !== undefined && override !== "";
-      const suspect = first?.ocr && !typed ? implausibleReason(first.r.value, referenceBounds(first.r.labReference)) ?? undefined : undefined;
+      const other = first && !first.recovered ? altFile[first.i]?.get(id) : undefined;
+      const divergent = other && other.value !== first.r.value ? `as duas leituras da imagem divergem (${String(first.r.value).replace(".", ",")} e ${String(other.value).replace(".", ",")})` : undefined;
+      const suspect = typed ? undefined : divergent ?? (first?.recovered ? "lido só na segunda leitura da imagem" : undefined) ?? (first?.ocr ? implausibleReason(first.r.value, referenceBounds(first.r.labReference)) ?? undefined : undefined);
       return { id, exam: examById.get(id)!, rule: rules[id], found, alternatives: alternatives.length ? alternatives : undefined, suspect, value, status: evaluate(value, rules[id]) };
     })
     .sort((a, b) => STATUS_ORDER[a.status] - STATUS_ORDER[b.status]);

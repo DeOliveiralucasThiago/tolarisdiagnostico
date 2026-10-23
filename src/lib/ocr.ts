@@ -74,3 +74,50 @@ export function binarizeAdaptive(rgba: Uint8ClampedArray, w: number, h: number, 
   }
   return out;
 }
+
+/**
+ * Estima a inclinação do texto (em graus) pelo perfil horizontal: o ângulo em que as linhas de texto ficam mais
+ * "alinhadas" (maior variância das alturas) é o certo. Convenção de canvas (y para baixo): girar a imagem por
+ * `estimateSkew(...)` graus no sentido horário endireita o texto. Devolve 0 se não houver texto suficiente.
+ */
+export function estimateSkew(gray: Uint8Array | Uint8ClampedArray, w: number, h: number, maxDeg = 5): number {
+  // amostra os pixels escuros (texto) numa grade, no máximo ~40 mil pontos
+  const dark: number[] = [];
+  let sum = 0;
+  for (let i = 0; i < gray.length; i += 7) sum += gray[i];
+  const thr = (sum / Math.ceil(gray.length / 7)) * 0.7;
+  const step = Math.max(1, Math.floor(Math.sqrt((w * h) / 40000)));
+  for (let y = 0; y < h; y += step) for (let x = 0; x < w; x += step) if (gray[y * w + x] < thr) dark.push(x, y);
+  if (dark.length < 400) return 0;
+
+  const bins = Math.ceil(Math.hypot(w, h) / step) + 2;
+  const score = (deg: number) => {
+    const a = (deg * Math.PI) / 180, sin = Math.sin(a), cos = Math.cos(a);
+    const hist = new Float64Array(bins);
+    const off = Math.abs(w * sin) / step;
+    for (let i = 0; i < dark.length; i += 2) {
+      const y = (dark[i] * sin + dark[i + 1] * cos) / step + off;
+      hist[Math.min(bins - 1, Math.max(0, Math.round(y)))]++;
+    }
+    let sq = 0;
+    for (const c of hist) sq += c * c;
+    return sq;
+  };
+
+  let best = 0, bestScore = score(0);
+  for (let d = -maxDeg; d <= maxDeg; d += 0.5) {
+    const sc = score(d);
+    if (sc > bestScore) { bestScore = sc; best = d; }
+  }
+  for (let d = best - 0.5; d <= best + 0.5; d += 0.1) {
+    const sc = score(d);
+    if (sc > bestScore) { bestScore = sc; best = d; }
+  }
+  return Math.abs(best) < 0.3 ? 0 : Math.round(best * 10) / 10;
+}
+
+export function grayFromRgba(rgba: Uint8ClampedArray, w: number, h: number): Uint8Array {
+  const gray = new Uint8Array(w * h);
+  for (let i = 0; i < w * h; i++) gray[i] = (rgba[i * 4] * 299 + rgba[i * 4 + 1] * 587 + rgba[i * 4 + 2] * 114) / 1000;
+  return gray;
+}

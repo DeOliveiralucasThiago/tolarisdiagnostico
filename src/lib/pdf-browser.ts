@@ -1,4 +1,4 @@
-import { ocrCanvas } from "./ocr-browser";
+import { ocrCanvasTwoPass } from "./ocr-browser";
 import { OCR_MAX_PAGES, ocrScaleFor } from "./ocr";
 import { itemsFromPdf } from "./pdf-items";
 import type { TextItem } from "./types";
@@ -7,6 +7,8 @@ export interface ReadResult {
   items: TextItem[];
   /** true quando o texto veio de reconhecimento de imagem (OCR) e pode conter erros. */
   ocr: boolean;
+  /** Segunda leitura do OCR (para conferir a primeira). */
+  altItems?: TextItem[];
 }
 
 export interface ReadOptions {
@@ -45,9 +47,9 @@ async function readImage(file: File, opts: ReadOptions): Promise<ReadResult> {
   ctx.fillRect(0, 0, canvas.width, canvas.height);
   ctx.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
   bitmap.close();
-  const items = await ocrCanvas(canvas, 1, scale);
+  const { items, altItems } = await ocrCanvasTwoPass(canvas, 1, scale);
   canvas.width = canvas.height = 0; // libera memória
-  return { items, ocr: true };
+  return { items, altItems, ocr: true };
 }
 
 /**
@@ -68,6 +70,7 @@ export async function readFileInBrowser(source: File | ArrayBuffer, name = "", o
     // sem texto: PDF escaneado -> OCR página a página
     if (pdf.numPages > OCR_MAX_PAGES) throw new Error(`PDF escaneado com mais de ${OCR_MAX_PAGES} páginas`);
     const out: TextItem[] = [];
+    const alt: TextItem[] = [];
     for (let n = 1; n <= pdf.numPages; n++) {
       opts.onStatus?.(`Reconhecendo texto de ${name || "PDF escaneado"}: página ${n} de ${pdf.numPages}…`);
       const page = await pdf.getPage(n);
@@ -75,10 +78,12 @@ export async function readFileInBrowser(source: File | ArrayBuffer, name = "", o
       const viewport = page.getViewport({ scale });
       const canvas = newCanvas(viewport.width, viewport.height);
       await page.render({ canvasContext: canvas.getContext("2d")!, viewport }).promise;
-      out.push(...(await ocrCanvas(canvas, n, scale)));
+      const pass = await ocrCanvasTwoPass(canvas, n, scale);
+      out.push(...pass.items);
+      alt.push(...pass.altItems);
       canvas.width = canvas.height = 0;
     }
-    return { items: out, ocr: true };
+    return { items: out, altItems: alt, ocr: true };
   } finally {
     await pdf.destroy();
   }

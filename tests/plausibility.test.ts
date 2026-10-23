@@ -86,3 +86,66 @@ describe("binarizeAdaptive", () => {
     expect(at(92, 20)).toBe(0);    // traço no lado sombreado
   });
 });
+
+import { estimateSkew } from "@/lib/ocr";
+
+describe("estimateSkew (endireitar fotos tortas)", () => {
+  // linhas de texto horizontais simuladas por pontos escuros, depois giradas por `deg` (convenção de canvas)
+  const make = (deg: number) => {
+    const w = 600, h = 800, gray = new Uint8Array(w * h).fill(255);
+    const a = (deg * Math.PI) / 180, cx = w / 2, cy = h / 2;
+    for (let line = 0; line < 20; line++) {
+      const y0 = 80 + line * 30;
+      for (let x = 60; x < 540; x++) {
+        if (x % 7 > 4) continue;
+        for (let t = 0; t < 8; t++) {
+          const px = x - cx, py = y0 + t - cy;
+          const X = Math.round(cx + px * Math.cos(a) - py * Math.sin(a)), Y = Math.round(cy + px * Math.sin(a) + py * Math.cos(a));
+          if (X >= 0 && X < w && Y >= 0 && Y < h) gray[Y * w + X] = 0;
+        }
+      }
+    }
+    return { gray, w, h };
+  };
+  it.each([2, -3, 1])("detecta a inclinação de %s° e devolve o giro que endireita (sinal oposto)", (deg) => {
+    const { gray, w, h } = make(deg);
+    expect(estimateSkew(gray, w, h)).toBeCloseTo(-deg, 0);
+  });
+  it("texto reto: 0", () => {
+    const { gray, w, h } = make(0);
+    expect(estimateSkew(gray, w, h)).toBe(0);
+  });
+  it("página em branco: 0 (sem inventar rotação)", () => {
+    expect(estimateSkew(new Uint8Array(600 * 800).fill(255), 600, 800)).toBe(0);
+  });
+});
+
+describe("duas leituras do OCR", () => {
+  const mk = (str: string, y: number, x = 50): TextItem => ({ str, x, y, width: 60, page: 1 });
+  const lin = (nome: string, v: string, y: number) => [mk(nome, y), mk(v, y, 200), mk("g/dL", y, 260)];
+  const rules = { hemoglobina: DEFAULT_PRESET.rules.hemoglobina };
+
+  it("leituras que concordam não geram alerta", () => {
+    const r = analyzeFiles([{ fileName: "f.jpg", ocr: true, items: lin("Hemoglobina", "12,6", 700), altItems: lin("Hemoglobina", "12,6", 700) }], rules, EXAMS).rows[0];
+    expect(r.suspect).toBeUndefined();
+    expect(r.value).toBe(12.6);
+  });
+  it("leituras que divergem marcam 'conferir' e mostram as duas", () => {
+    const r = analyzeFiles([{ fileName: "f.jpg", ocr: true, items: lin("Hemoglobina", "12,6", 700), altItems: lin("Hemoglobina", "126", 700) }], rules, EXAMS).rows[0];
+    expect(r.suspect).toMatch(/divergem \(12,6 e 126\)/);
+    expect(r.value).toBe(12.6); // prevalece a primeira leitura; o médico confere
+  });
+  it("exame que só a segunda leitura achou é aproveitado, com pedido de conferência", () => {
+    const r = analyzeFiles([{ fileName: "f.jpg", ocr: true, items: [mk("lixo", 700)], altItems: lin("Hemoglobina", "14,2", 700) }], rules, EXAMS).rows[0];
+    expect(r.value).toBe(14.2);
+    expect(r.suspect).toMatch(/segunda leitura/);
+  });
+  it("o valor digitado pelo médico encerra o alerta", () => {
+    const r = analyzeFiles([{ fileName: "f.jpg", ocr: true, items: lin("Hemoglobina", "12,6", 700), altItems: lin("Hemoglobina", "126", 700) }], rules, EXAMS, { hemoglobina: "12,6" }).rows[0];
+    expect(r.suspect).toBeUndefined();
+  });
+  it("PDF de texto (sem OCR) nunca gera esse alerta", () => {
+    const r = analyzeFiles([{ fileName: "a.pdf", items: lin("Hemoglobina", "12,6", 700) }], rules, EXAMS).rows[0];
+    expect(r.suspect).toBeUndefined();
+  });
+});

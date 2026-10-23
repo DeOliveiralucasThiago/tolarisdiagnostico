@@ -11,6 +11,8 @@ export interface Member {
   problem?: string;
   /** Texto obtido por reconhecimento de imagem (OCR): pode ter erros, o médico precisa conferir. */
   ocr?: boolean;
+  /** Segunda leitura do OCR, para conferir a primeira. */
+  altItems?: TextItem[];
 }
 
 export interface Group {

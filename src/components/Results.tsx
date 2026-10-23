@@ -74,7 +74,7 @@ export function Results({ analysis, overrides, onOverride, embedded = false, hea
                   {found?.qualifier && <span className="unit">({found.raw})</span>}
                   {suspect && (
                     <div className="repeated" title="Pode ser erro de leitura da imagem (por exemplo, vírgula perdida). Confira com o laudo original.">
-                      <span className="badge">⚠ conferir</span> {String(value).replace(".", ",")} é {suspect}
+                      <span className="badge">⚠ conferir</span> {suspect.startsWith("muito") ? `${String(value).replace(".", ",")} é ${suspect}` : suspect}
                     </div>
                   )}
                   {alternatives && (

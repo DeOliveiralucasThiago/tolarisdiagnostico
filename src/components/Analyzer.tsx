@@ -156,7 +156,7 @@ export function Analyzer({ storage, account }: Props) {
         added[i] =
           r.items.length === 0
             ? { id, fileName: s.name, items: [], info: {}, ocr: r.ocr, problem: r.ocr ? "Não foi possível reconhecer texto neste arquivo (imagem muito escura, torta ou de baixa qualidade?)." : "Sem texto no arquivo." }
-            : { id, fileName: s.name, items: r.items, info: parsePatient(r.items), ocr: r.ocr };
+            : { id, fileName: s.name, items: r.items, altItems: r.altItems, info: parsePatient(r.items), ocr: r.ocr };
       } catch (e) {
         const msg = (e as Error).message ?? "";
         added[i] = {
@@ -283,7 +283,7 @@ export function Analyzer({ storage, account }: Props) {
     const hit = analysisCache.current.get(g.id);
     const ov = overrides[g.id];
     if (hit && hit.sig === sig && hit.rules === active.rules && hit.catalog === catalog && hit.overrides === ov) return hit.analysis;
-    const analysis = analyzeFiles(readable.map((m) => ({ fileName: m.fileName, items: m.items, ocr: m.ocr })), active.rules, catalog, ov);
+    const analysis = analyzeFiles(readable.map((m) => ({ fileName: m.fileName, items: m.items, altItems: m.altItems, ocr: m.ocr })), active.rules, catalog, ov);
     analysisCache.current.set(g.id, { sig, rules: active.rules, catalog, overrides: ov, analysis });
     return analysis;
   };
