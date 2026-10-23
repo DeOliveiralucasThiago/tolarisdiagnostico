@@ -7,6 +7,9 @@ localiza cada exame e mostra um semáforo (verde / laranja / vermelho / cinza = 
 ## Análise em lote
 Envie vários PDFs de uma vez (um laudo por paciente). A ferramenta lê o nome e a data de nascimento do cabeçalho, analisa cada laudo com o preset escolhido e mostra uma lista ordenada do mais crítico ao menos crítico, com filtros (situação, exame alterado, busca por nome) e detalhe por paciente. Tudo acontece no navegador e **nada é guardado**: ao recarregar a página, a lista some.
 
+## Presets: criar, baixar e importar
+Em **Criar preset** o médico monta um novo conjunto de critérios (cópia do atual ou em branco). **Baixar este preset / Baixar todos** gera um arquivo `.json` só com critérios e os exames personalizados usados (nunca dados de pacientes), e **Importar arquivo** o carrega em outro computador, sem sobrescrever nada (`src/lib/preset-file.ts`, com validação rigorosa do arquivo recebido).
+
 ## Princípios
 - **Privacidade:** o PDF é lido no navegador (pdf.js) e nunca é enviado nem armazenado. Só os presets (faixas, sem dados de paciente) ficam no `localStorage`.
 - **Leitura independente de layout:** cada exame é encontrado pelo nome/sinônimos (`src/lib/exams.ts`), não pela posição; o resultado é separado da faixa de referência do laboratório (`src/lib/extract.ts`).

@@ -29,7 +29,7 @@ export function makeTourSteps({ ensureSample, openPreset, expandFirst }: { ensur
       body: (
         <>
           <p>Um preset é o seu conjunto de critérios. Você pode ter vários, por exemplo um por laboratório ou por tipo de exame ocupacional (admissional, periódico…), e escolher qual usar a cada análise.</p>
-          <p>Use <strong>Duplicar</strong> para criar variações a partir de um preset existente.</p>
+          <p>Use <strong>Criar preset</strong> para montar variações (como uma cópia do atual) e <strong>Baixar / Importar</strong> para levar seus critérios a outro computador.</p>
         </>
       ),
     },

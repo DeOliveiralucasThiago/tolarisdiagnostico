@@ -1,9 +1,11 @@
 "use client";
 
 import { useState } from "react";
-import { IconChevron, IconPlus } from "@/components/Icons";
+import { useRef } from "react";
+import { IconChevron, IconDownload, IconPlus, IconUpload } from "@/components/Icons";
 import { SectionHead } from "@/components/SectionHead";
 import { makeCustomExam } from "@/lib/custom-exams";
+import { buildPresetFile, mergeImport, parsePresetFile, presetFileName } from "@/lib/preset-file";
 import { newId, type Preset } from "@/lib/presets";
 import type { ExamDefinition, Rule } from "@/lib/types";
 
@@ -28,6 +30,9 @@ interface Props {
 export function PresetEditor({ presets, activeId, catalog, onChange, customExams, onCustomExamsChange, open, onToggle }: Props) {
   const active = presets.find((p) => p.id === activeId) ?? presets[0];
   const [form, setForm] = useState({ open: false, name: "", search: "", unit: "" });
+  const [create, setCreate] = useState<{ open: boolean; name: string; from: "copy" | "blank" }>({ open: false, name: "", from: "copy" });
+  const [notice, setNotice] = useState<{ kind: "ok" | "err"; text: string } | null>(null);
+  const fileRef = useRef<HTMLInputElement>(null);
 
   const update = (patch: Partial<Preset>) =>
     onChange(presets.map((p) => (p.id === active.id ? { ...p, ...patch } : p)), active.id);
@@ -70,14 +75,52 @@ export function PresetEditor({ presets, activeId, catalog, onChange, customExams
     );
   };
 
-  const duplicate = () => {
+  const createPreset = () => {
     const id = newId();
-    const copy: Preset = { ...active, id, name: `${active.name} (cópia)`, rules: structuredClone(active.rules) };
-    onChange([...presets, copy], id);
+    const rules = create.from === "copy" ? structuredClone(active.rules) : {};
+    onChange([...presets, { id, name: create.name.trim() || "Novo preset", rules }], id);
+    setCreate({ open: false, name: "", from: "copy" });
+    setNotice(null);
+  };
+
+  const download = (list: Preset[]) => {
+    const blob = new Blob([JSON.stringify(buildPresetFile(list, catalog), null, 2)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = presetFileName(list);
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+    setNotice({ kind: "ok", text: `Arquivo “${a.download}” baixado. Guarde-o em local seguro ou leve para outro computador e use “Importar arquivo”.` });
+  };
+
+  const importFile = async (file: File) => {
+    if (file.size > 1_000_000) {
+      setNotice({ kind: "err", text: "O arquivo é grande demais para ser um preset." });
+      return;
+    }
+    const parsed = parsePresetFile(await file.text());
+    if (!parsed.ok) {
+      setNotice({ kind: "err", text: parsed.error });
+      return;
+    }
+    const out = mergeImport(parsed.file, { presets, customExams }, newId);
+    onCustomExamsChange(out.customExams);
+    onChange(out.presets, out.importedIds[0]);
+    const r = out.report;
+    setNotice({
+      kind: "ok",
+      text:
+        `${r.presets} ${r.presets === 1 ? "preset importado" : "presets importados"}` +
+        (r.addedExams ? ` e ${r.addedExams} ${r.addedExams === 1 ? "exame personalizado adicionado" : "exames personalizados adicionados"}` : "") +
+        "." +
+        (r.skippedRules ? ` ${r.skippedRules} ${r.skippedRules === 1 ? "faixa foi ignorada" : "faixas foram ignoradas"} por serem de exames que este sistema não conhece.` : ""),
+    });
   };
 
   const remove = () => {
     if (presets.length < 2) return;
+    if (!window.confirm(`Excluir o preset “${active.name}”? Esta ação não pode ser desfeita.`)) return;
     const rest = presets.filter((p) => p.id !== active.id);
     onChange(rest, rest[0].id);
   };
@@ -111,11 +154,58 @@ export function PresetEditor({ presets, activeId, catalog, onChange, customExams
 
       {open && (
         <div className="preset-body">
-          <div className="row" style={{ marginBottom: 12 }}>
-            <input type="text" value={active.name} onChange={(e) => update({ name: e.target.value })} aria-label="Nome do preset" style={{ minWidth: 240 }} />
-            <button className="small" onClick={duplicate}>Duplicar preset</button>
+          <div className="toolbar">
+            <label className="inline-field">
+              <span>Nome do preset</span>
+              <input type="text" value={active.name} onChange={(e) => update({ name: e.target.value })} aria-label="Nome do preset" style={{ minWidth: 240 }} />
+            </label>
+            <button className="small" onClick={() => setCreate((c) => ({ ...c, open: !c.open }))} aria-expanded={create.open}>
+              <IconPlus width={16} height={16} /> Criar preset
+            </button>
             <button className="small" onClick={remove} disabled={presets.length < 2}>Excluir preset</button>
           </div>
+
+          {create.open && (
+            <div className="sub-card">
+              <h2 style={{ marginBottom: 10 }}>Novo preset</h2>
+              <div className="row">
+                <input type="text" placeholder="Nome (ex.: Exame admissional)" value={create.name} onChange={(e) => setCreate({ ...create, name: e.target.value })} aria-label="Nome do novo preset" style={{ minWidth: 260 }} />
+              </div>
+              <fieldset className="choices">
+                <legend className="muted">Começar com</legend>
+                <label><input type="radio" name="from" checked={create.from === "copy"} onChange={() => setCreate({ ...create, from: "copy" })} /> Uma cópia do preset atual (“{active.name}”), para ajustar só o que muda</label>
+                <label><input type="radio" name="from" checked={create.from === "blank"} onChange={() => setCreate({ ...create, from: "blank" })} /> Em branco, adicionando os exames um a um</label>
+              </fieldset>
+              <div className="row">
+                <button className="primary" onClick={createPreset}>Criar preset</button>
+                <button className="ghost" onClick={() => setCreate({ open: false, name: "", from: "copy" })}>Cancelar</button>
+              </div>
+            </div>
+          )}
+
+          <div className="toolbar backup">
+            <span className="muted">Levar seus critérios para outro computador:</span>
+            <button className="small" onClick={() => download([active])}><IconDownload width={16} height={16} /> Baixar este preset</button>
+            <button className="small" onClick={() => download(presets)} disabled={presets.length < 2}>Baixar todos</button>
+            <button className="small" onClick={() => fileRef.current?.click()}><IconUpload width={16} height={16} /> Importar arquivo</button>
+            <input
+              ref={fileRef}
+              type="file"
+              accept=".json,application/json"
+              hidden
+              aria-label="Importar arquivo de preset"
+              onChange={(e) => {
+                const f = e.target.files?.[0];
+                if (f) importFile(f);
+                e.target.value = "";
+              }}
+            />
+          </div>
+          {notice && (
+            <p className={notice.kind === "ok" ? "notice" : "err"} role={notice.kind === "ok" ? "status" : "alert"} style={{ marginBottom: 12 }}>
+              {notice.text}
+            </p>
+          )}
           <p className="muted" style={{ marginBottom: 10 }}>
             Deixe em branco o que não usar. Exames sem nenhuma faixa não são avaliados.
           </p>

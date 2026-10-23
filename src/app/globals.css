@@ -68,6 +68,11 @@ input[type=number] { width: 92px; }
 .preset-bar { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
 .preset-bar select { min-width: 220px; max-width: 100%; }
 .preset-summary { margin-left: auto; }
+.toolbar { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-bottom: 12px; }
+.toolbar.backup { padding: 10px 12px; border: 1px dashed var(--line); border-radius: 12px; background: var(--surface-2); }
+.inline-field { display: inline-flex; align-items: center; gap: 8px; font-size: 13px; color: var(--muted); font-weight: 600; }
+.choices { border: 0; margin: 12px 0; padding: 0; display: grid; gap: 6px; font-size: 14px; }
+.choices label { display: flex; gap: 8px; align-items: flex-start; }
 .preset-body { margin-top: 16px; padding-top: 16px; border-top: 1px dashed var(--line); }
 .chev { transition: transform .2s; }
 .chev.open { transform: rotate(180deg); }

@@ -5,6 +5,9 @@ const base = { width: 20, height: 20, viewBox: "0 0 24 24", fill: "none", stroke
 export const IconUpload = (p: SVGProps<SVGSVGElement>) => (
   <svg {...base} {...p}><path d="M12 16V4m0 0L7 9m5-5 5 5" /><path d="M4 16v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3" /></svg>
 );
+export const IconDownload = (p: SVGProps<SVGSVGElement>) => (
+  <svg {...base} {...p}><path d="M12 4v12m0 0-5-5m5 5 5-5" /><path d="M4 16v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3" /></svg>
+);
 export const IconLock = (p: SVGProps<SVGSVGElement>) => (
   <svg {...base} {...p}><rect x="5" y="11" width="14" height="9" rx="2" /><path d="M8 11V8a4 4 0 0 1 8 0v3" /></svg>
 );
