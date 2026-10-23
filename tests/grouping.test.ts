@@ -1,14 +1,14 @@
 import { describe, expect, it } from "vitest";
 import { analyzeFiles } from "@/lib/analysis";
 import { EXAMS } from "@/lib/exams";
-import { autoGroupId, buildGroups, findSuggestions, mergeGroups, nameKey, separateMember, type Member } from "@/lib/grouping";
+import { buildGroups, findSuggestions, mergeGroups, nameKey, separateMember, type Member } from "@/lib/grouping";
 import { DEFAULT_PRESET } from "@/lib/presets";
 import type { TextItem } from "@/lib/types";
 
 const mk = (str: string, y: number, x = 50): TextItem => ({ str, x, y, width: 60, page: 1 });
 const exam = (nome: string, valor: string, y: number, unit = "mg/dL"): TextItem[] => [mk(nome, y), mk(valor, y, 200), mk(unit, y, 260)];
-const member = (id: string, name: string | undefined, birth: string | undefined, items: TextItem[] = [], problem?: string): Member => ({
-  id, fileName: `${id}.pdf`, items, info: { name, birth }, problem,
+const member = (id: string, name: string | undefined, birth: string | undefined, items: TextItem[] = [], problem?: string, cpf?: string): Member => ({
+  id, fileName: `${id}.pdf`, items, info: { name, birth, cpf }, problem,
 });
 
 describe("chave de nome", () => {
@@ -33,7 +33,7 @@ describe("agrupamento automático", () => {
   it("sem data de nascimento nunca une sozinho", () => {
     const g = buildGroups([member("a", "RUI ALVES", "09/09/1988"), member("b", "RUI ALVES", undefined)], {});
     expect(g).toHaveLength(2);
-    expect(autoGroupId(member("c", "RUI ALVES", undefined))).toBe("file:c");
+    expect(buildGroups([member("c", "RUI ALVES", undefined), member("d", "RUI ALVES", undefined)], {})).toHaveLength(2);
   });
   it("arquivo ilegível nunca entra em grupo", () => {
     const g = buildGroups([member("a", "X", "01/01/2000"), member("b", undefined, undefined, [], "Sem texto")], {});
@@ -128,7 +128,8 @@ describe("de ponta a ponta com PDFs fictícios", () => {
     const rui2 = await load("rui-parte2-sem-nascimento.pdf", "5");
 
     expect(m1.info).toEqual({ name: "ANA COSTA", birth: "09/09/1988" });
-    expect(rui2.info).toEqual({ name: "RUI ALVES" }); // sem data de nascimento
+    expect(rui2.info).toMatchObject({ name: "RUI ALVES" }); // sem data de nascimento
+    expect(rui2.info.birth).toBeUndefined();
     const groups = buildGroups([m1, m2, m3, rui1, rui2], {});
     expect(groups.map((g) => g.members.length)).toEqual([3, 1, 1]); // Ana unida; Rui separado
     expect(findSuggestions(groups, new Set())).toHaveLength(1); // Rui: possível mesmo paciente
@@ -147,5 +148,91 @@ describe("de ponta a ponta com PDFs fictícios", () => {
     const rui = analyzeFiles(unido.members.map((m) => ({ fileName: m.fileName, items: m.items })), rules, EXAMS);
     expect(rui.rows.find((r) => r.id === "glicose")?.value).toBe(92);
     expect(rui.rows.find((r) => r.id === "hemoglobina")?.value).toBe(14);
+  });
+});
+
+
+const CPF_A = "11144477735";
+const CPF_B = "52998224725";
+const CPF_C = "39053344705";
+
+describe("vínculo por CPF (só para achar os arquivos do mesmo paciente)", () => {
+  it("os CPFs de teste são válidos (dígitos verificadores)", async () => {
+    const { isValidCpf } = await import("@/lib/cpf");
+    expect([CPF_A, CPF_B, CPF_C].map(isValidCpf)).toEqual([true, true, true]);
+  });
+
+  it("mesmo CPF une os arquivos mesmo sem data de nascimento num deles", () => {
+    const g = buildGroups([member("a", "ANA COSTA", "09/09/1988", [], undefined, CPF_A), member("b", "ANA COSTA", undefined, [], undefined, CPF_A)], {});
+    expect(g).toHaveLength(1);
+    expect(g[0].via).toBe("cpf");
+    expect(findSuggestions(g, new Set())).toEqual([]);
+  });
+
+  it("mesmo CPF une mesmo com nome escrito de outro jeito (primeiro e último nome batem)", () => {
+    const g = buildGroups([member("a", "JOÃO DA SILVA", "12/05/1985", [], undefined, CPF_A), member("b", "João Pedro Silva", "12/05/1985", [], undefined, CPF_A)], {});
+    expect(g).toHaveLength(1);
+  });
+
+  it("mesmo CPF, mas nomes bem diferentes: NÃO une sozinho e pede confirmação", () => {
+    const g = buildGroups([member("a", "ANA COSTA", "09/09/1988", [], undefined, CPF_A), member("b", "CARLA MENDES", "09/09/1988", [], undefined, CPF_A)], {});
+    expect(g).toHaveLength(2);
+    const s = findSuggestions(g, new Set());
+    expect(s).toHaveLength(1);
+    expect(s[0].reason).toBe("cpf");
+  });
+
+  it("mesmo CPF com nascimentos diferentes: não une sozinho (pode ser erro do laboratório)", () => {
+    const g = buildGroups([member("a", "ANA COSTA", "09/09/1988", [], undefined, CPF_A), member("b", "ANA COSTA", "10/10/1990", [], undefined, CPF_A)], {});
+    expect(g).toHaveLength(2);
+    expect(findSuggestions(g, new Set())[0].reason).toBe("cpf");
+  });
+
+  it("CPFs diferentes com mesmo nome e nascimento são pessoas diferentes: nunca une nem sugere", () => {
+    const g = buildGroups([member("a", "BIA LIMA", "05/05/1995", [], undefined, CPF_B), member("b", "BIA LIMA", "05/05/1995", [], undefined, CPF_C)], {});
+    expect(g).toHaveLength(2);
+    expect(findSuggestions(g, new Set())).toEqual([]);
+  });
+
+  it("laudo sem CPF com o mesmo nome e nascimento de UM paciente com CPF entra nele", () => {
+    const g = buildGroups([member("a", "BIA LIMA", "05/05/1995", [], undefined, CPF_B), member("b", "BIA LIMA", "05/05/1995")], {});
+    expect(g).toHaveLength(1);
+    expect(g[0].members).toHaveLength(2);
+    expect(g[0].via).toBe("nome");
+  });
+
+  it("laudo sem CPF que combina com DOIS pacientes de CPFs diferentes fica separado e pede decisão", () => {
+    const base = [member("a", "BIA LIMA", "05/05/1995", [], undefined, CPF_B), member("b", "BIA LIMA", "05/05/1995", [], undefined, CPF_C), member("c", "BIA LIMA", "05/05/1995")];
+    for (const ordem of [base, [base[2], base[0], base[1]], [base[0], base[2], base[1]]]) {
+      const g = buildGroups(ordem, {});
+      expect(g).toHaveLength(3); // o resultado não depende da ordem de envio
+      const s = findSuggestions(g, new Set());
+      expect(s).toHaveLength(2);
+      expect(s.every((x) => x.reason === "ambiguous")).toBe(true);
+    }
+  });
+
+  it("depois de o médico unir o laudo ambíguo a um dos pacientes, as sugestões desse laudo somem", () => {
+    const ms = [member("a", "BIA LIMA", "05/05/1995", [], undefined, CPF_B), member("b", "BIA LIMA", "05/05/1995", [], undefined, CPF_C), member("c", "BIA LIMA", "05/05/1995")];
+    const g = buildGroups(ms, {});
+    const [s] = findSuggestions(g, new Set());
+    const g2 = buildGroups(ms, mergeGroups({}, s.a.members[0].id === "c" ? s.b : s.a, s.a.members[0].id === "c" ? s.a : s.b));
+    expect(g2).toHaveLength(2);
+  });
+
+  it("CPF só entra se for válido: um CPF mal lido (OCR) é ignorado", async () => {
+    const { extractCpf } = await import("@/lib/cpf");
+    expect(extractCpf("CPF: 111.444.777-35")).toBe(CPF_A);
+    expect(extractCpf("CPF: 111.444.777-36")).toBeUndefined();
+    expect(extractCpf("CPF: 111.111.111-11")).toBeUndefined();
+  });
+
+  it("o CPF nunca aparece na planilha nem no resumo", async () => {
+    const { buildBatchCsv, buildSummaryText } = await import("@/lib/export");
+    const [g] = buildGroups([member("a", "ANA COSTA", "09/09/1988", [], undefined, CPF_A)], {});
+    const p = { label: "Ana Costa", fileName: "a.pdf", analysis: null, problem: "x", birth: g.birth };
+    const saida = buildBatchCsv([p], []) + buildSummaryText(p, "P");
+    expect(saida).not.toContain(CPF_A);
+    expect(saida).not.toMatch(/\d{3}\.\d{3}\.\d{3}-\d{2}/);
   });
 });

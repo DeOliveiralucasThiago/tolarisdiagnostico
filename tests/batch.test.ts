@@ -20,6 +20,12 @@ describe("parsePatient", () => {
   it("lê 'Nome do paciente:' e 'Nascimento:'", () => {
     expect(parsePatient(header("Nome do paciente: JOSÉ SANTOS", "Nascimento: 21/08/1978"))).toEqual({ name: "JOSÉ SANTOS", birth: "21/08/1978" });
   });
+  it("lê o CPF do cabeçalho (só se for válido) e ignora o resto da linha", () => {
+    expect(parsePatient(header("CLIENTE: JOÃO DA SILVA DN: 12/05/1985", "CPF: 111.444.777-35 RG: 3252910"))).toEqual({ name: "JOÃO DA SILVA", birth: "12/05/1985", cpf: "11144477735" });
+    expect(parsePatient(header("Paciente: ANA", "CPF 111.444.777-35")).cpf).toBe("11144477735");
+    expect(parsePatient(header("Paciente: ANA", "CPF: 111.444.777-99")).cpf).toBeUndefined(); // dígitos verificadores errados
+    expect(parsePatient(header("Paciente: ANA", "RG 12345678")).cpf).toBeUndefined();
+  });
   it("sem cabeçalho reconhecível não inventa nome", () => {
     expect(parsePatient(header("RESULTADO DE EXAMES", "Glicose 92 mg/dL"))).toEqual({});
   });

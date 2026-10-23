@@ -130,6 +130,16 @@ async function main() {
   writeFileSync(path.join(FIX, "rui-parte2-sem-nascimento.pdf"), await layoutB(withValues({ Hemoglobina: "14,0", TSH: "2,0" }), ["CLIENTE: RUI ALVES"]));
   // homônimo de Maria Souza (outro nascimento): nunca unir
   writeFileSync(path.join(FIX, "maria-homonima.pdf"), await layoutA(withValues({ "Glicose em jejum": "85", Hemoglobina: "14,5" }), ["Paciente: MARIA SOUZA", "Data de nascimento: 01/01/1970"]));
+  // --- CPF (números FICTÍCIOS, com dígitos verificadores válidos) ---
+  const anaCpf = "CPF: 111.444.777-35 RG: 1234567";
+  writeFileSync(path.join(FIX, "anacpf-1.pdf"), await layoutA(withValues({ "Glicose em jejum": "131" }), ["Paciente: ANA COSTA", "Data de nascimento: 09/09/1988", anaCpf]));
+  // mesmo CPF, nome escrito de outro jeito e sem data de nascimento: deve ser vinculado pelo CPF
+  writeFileSync(path.join(FIX, "anacpf-2.pdf"), await layoutB(withValues({ Hemoglobina: "12,6", TSH: "3,1" }), ["Paciente: ANA MARIA COSTA", anaCpf]));
+  // três "BIA LIMA" com o mesmo nascimento: dois com CPFs diferentes e um sem CPF (ambíguo)
+  const bia = ["Paciente: BIA LIMA", "Data de nascimento: 05/05/1995"];
+  writeFileSync(path.join(FIX, "bia-1.pdf"), await layoutA(withValues({ "Glicose em jejum": "90" }), [...bia, "CPF: 529.982.247-25"]));
+  writeFileSync(path.join(FIX, "bia-2.pdf"), await layoutA(withValues({ "Glicose em jejum": "140" }), [...bia, "CPF: 390.533.447-05"]));
+  writeFileSync(path.join(FIX, "bia-3-sem-cpf.pdf"), await layoutB(withValues({ Hemoglobina: "14,0" }), bia));
   console.log("Fixtures de teste gerados em", FIX);
 }
 

@@ -1,3 +1,4 @@
+import { extractCpf } from "./cpf";
 import { buildRows } from "./extract";
 import type { TextItem } from "./types";
 
@@ -5,6 +6,8 @@ export interface PatientInfo {
   name?: string;
   /** dd/mm/aaaa, como no laudo */
   birth?: string;
+  /** 11 dígitos, só se válido. Serve apenas para vincular arquivos do mesmo paciente (nunca é exibido). */
+  cpf?: string;
 }
 
 const HEADER_ROWS = 45;
@@ -30,7 +33,8 @@ export function parsePatient(items: TextItem[]): PatientInfo {
       const b = BIRTH_RE.exec(row.text);
       if (b) info.birth = b[1];
     }
-    if (info.name && info.birth) break;
+    if (!info.cpf) info.cpf = extractCpf(row.text);
+    if (info.name && info.birth && info.cpf) break;
   }
   return info;
 }

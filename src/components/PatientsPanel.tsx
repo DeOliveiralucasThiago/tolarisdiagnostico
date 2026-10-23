@@ -24,6 +24,8 @@ export interface PatientRow extends BatchItem {
   members: { id: string; fileName: string }[];
   /** Algum arquivo foi lido por reconhecimento de imagem (OCR). */
   ocr: boolean;
+  /** Como os arquivos foram reunidos (o CPF em si nunca é exibido). */
+  via?: "cpf" | "nome";
 }
 
 /** Aviso para laudos lidos por OCR (foto ou escaneado): números podem vir errados. */
@@ -37,11 +39,11 @@ export function OcrNotice() {
 }
 
 /** Lista os arquivos reunidos em um paciente, com opção de separar. */
-export function MembersList({ members, onSeparate }: { members: { id: string; fileName: string }[]; onSeparate: (memberId: string) => void }) {
+export function MembersList({ members, onSeparate, via }: { members: { id: string; fileName: string }[]; onSeparate: (memberId: string) => void; via?: "cpf" | "nome" }) {
   if (members.length < 2) return null;
   return (
     <div className="members">
-      <span className="muted">Arquivos reunidos neste paciente:</span>
+      <span className="muted">Arquivos reunidos neste paciente{via === "cpf" ? " (vinculados pelo CPF)" : via === "nome" ? " (mesmo nome e data de nascimento)" : ""}:</span>
       {members.map((m) => (
         <span key={m.id} className="file-pill">
           {m.fileName}
@@ -147,16 +149,35 @@ export function PatientsPanel({ patients, exams, presetName, suggestions, onMerg
       {suggestions.length > 0 && (
         <div className="suggestions" role="status">
           {suggestions.map((sg) => {
-            const side = (g: Suggestion["a"]) => `${g.members.map((m) => m.fileName).join(" + ")} (${g.birth ? `nasc. ${g.birth}` : "sem data de nascimento"})`;
+            const files = (g: Suggestion["a"]) => g.members.map((m) => m.fileName).join(" + ");
+            const side = (g: Suggestion["a"]) => `${files(g)} (${g.birth ? `nasc. ${g.birth}` : "sem data de nascimento"})`;
+            const lone = sg.a.cpf ? sg.b : sg.a;
+            const owner = sg.a.cpf ? sg.a : sg.b;
             return (
               <div key={sg.key} className="suggestion">
                 <div>
-                  <strong>Possível mesmo paciente: {formatName(sg.a.name!)}.</strong>{" "}
-                  <span className="muted">{side(sg.a)} e {side(sg.b)}. Se os exames de um forem de um PDF e os do outro de outro, una para ver tudo junto.</span>
+                  {sg.reason === "cpf" && (
+                    <>
+                      <strong>Mesmo CPF, mas nome ou nascimento diferentes:</strong>{" "}
+                      <span className="muted">{formatName(sg.a.name ?? files(sg.a))} ({files(sg.a)}) e {formatName(sg.b.name ?? files(sg.b))} ({files(sg.b)}). Pode ser digitação do laboratório: confirme se é a mesma pessoa.</span>
+                    </>
+                  )}
+                  {sg.reason === "ambiguous" && (
+                    <>
+                      <strong>Laudo sem CPF que pode ser de mais de um paciente:</strong>{" "}
+                      <span className="muted">{files(lone)} tem o mesmo nome e nascimento de {files(owner)}, mas há outros pacientes iguais. Una ao paciente certo.</span>
+                    </>
+                  )}
+                  {sg.reason === "name" && (
+                    <>
+                      <strong>Possível mesmo paciente: {formatName(sg.a.name!)}.</strong>{" "}
+                      <span className="muted">{side(sg.a)} e {side(sg.b)}. Se os exames de um forem de um PDF e os do outro de outro, una para ver tudo junto.</span>
+                    </>
+                  )}
                 </div>
                 <div className="row">
                   <button className="small primary" onClick={() => onMerge(sg)}>Unir</button>
-                  <button className="small" onClick={() => onDismiss(sg)}>São pessoas diferentes</button>
+                  <button className="small" onClick={() => onDismiss(sg)}>{sg.reason === "cpf" ? "Manter separados" : "São pessoas diferentes"}</button>
                 </div>
               </div>
             );
@@ -264,7 +285,7 @@ export function PatientsPanel({ patients, exams, presetName, suggestions, onMerg
                   <tr key={`${p.id}-detail`} className="detail-row">
                     <td colSpan={5} data-tour={idx === 0 ? "detail" : undefined}>
                       {row.ocr && <OcrNotice />}
-                      <MembersList members={row.members} onSeparate={onSeparate} />
+                      <MembersList members={row.members} onSeparate={onSeparate} via={row.via} />
                       <div className="detail-actions">
                         <button className="small" onClick={() => copySummary(row)}>{copied === p.id ? "✓ Resumo copiado" : "Copiar resumo"}</button>
                         <button className="small" onClick={() => onPrint("patient", [p.id])}>Imprimir / PDF</button>

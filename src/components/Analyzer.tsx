@@ -303,6 +303,7 @@ export function Analyzer({ storage, account }: Props) {
           age,
           members: g.members.map((m) => ({ id: m.id, fileName: m.fileName })),
           ocr: readable.some((m) => m.ocr),
+          via: g.via,
           problem: readable.length ? undefined : g.members[0].problem,
           analysis: readable.length ? cachedAnalysis(g, readable) : null,
         };
@@ -448,7 +449,7 @@ export function Analyzer({ storage, account }: Props) {
               <div>
                 <div className="patient-name big">{single.label}</div>
                 <div className="muted">{[single.subtitle, single.members.length > 1 ? "" : single.fileName].filter(Boolean).join(" · ")}</div>
-                <MembersList members={single.members} onSeparate={separate} />
+                <MembersList members={single.members} onSeparate={separate} via={single.via} />
                 {single.ocr && <OcrNotice />}
               </div>
               <div className="row">
