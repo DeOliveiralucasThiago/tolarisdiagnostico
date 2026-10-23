@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { IconLock, IconUpload, Logo } from "@/components/Icons";
-import { PatientsPanel, toExport, type PatientRow } from "@/components/PatientsPanel";
+import { MembersList, PatientsPanel, toExport, type PatientRow } from "@/components/PatientsPanel";
 import { PrintReport, type PrintJob } from "@/components/PrintReport";
 import { PresetEditor } from "@/components/PresetEditor";
 import { SectionHead } from "@/components/SectionHead";
@@ -10,11 +10,12 @@ import { Tour } from "@/components/Tour";
 import { makeTourSteps } from "@/components/tour-steps";
 import { Results } from "@/components/Results";
 import { catalogWith } from "@/lib/custom-exams";
-import { analyze, type Analysis } from "@/lib/analysis";
+import { analyzeFiles, type Analysis } from "@/lib/analysis";
 import { filterAndSort } from "@/lib/batch";
 import { copyText } from "@/lib/clipboard";
 import { buildSummaryText } from "@/lib/export";
-import { ageFrom, formatName, parsePatient, type PatientInfo } from "@/lib/patient";
+import { buildGroups, findSuggestions, mergeGroups, separateMember, type Group, type Member, type Suggestion } from "@/lib/grouping";
+import { ageFrom, formatName, parsePatient } from "@/lib/patient";
 import { readPdfInBrowser } from "@/lib/pdf-browser";
 import { DEFAULT_PRESET, loadActivePresetId, newId, pickActivePreset, saveActivePresetId, type Preset } from "@/lib/presets";
 import type { Storage } from "@/lib/storage";
@@ -25,14 +26,7 @@ const TOUR_KEY = "tolaris.tourSeen.v1";
 // Três pacientes FICTÍCIOS (cada laudo em um layout diferente) para conhecer a análise em lote.
 const EXAMPLE_FILES = ["paciente-joao.pdf", "paciente-maria.pdf", "paciente-jose.pdf"];
 
-interface PatientEntry {
-  id: string;
-  fileName: string;
-  items: TextItem[];
-  info: PatientInfo;
-  /** Motivo, quando o PDF não pôde ser analisado. */
-  problem?: string;
-}
+type PatientEntry = Member;
 
 const READ_CONCURRENCY = 3;
 
@@ -59,6 +53,9 @@ export function Analyzer({ storage, account }: Props) {
   const [patients, setPatients] = useState<PatientEntry[]>([]);
   const [overrides, setOverrides] = useState<Record<string, Record<string, string>>>({});
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
+  // união de arquivos do mesmo paciente: escolhas do médico sobre a regra automática
+  const [manualGroups, setManualGroups] = useState<Record<string, string>>({});
+  const [dismissed, setDismissed] = useState<ReadonlySet<string>>(new Set());
   const [progress, setProgress] = useState<{ done: number; total: number } | null>(null);
   const [over, setOver] = useState(false);
   const [printJob, setPrintJob] = useState<PrintJob | null>(null);
@@ -178,6 +175,8 @@ export function Analyzer({ storage, account }: Props) {
 
   const clearAll = useCallback(() => {
     analysisCache.current.clear();
+    setManualGroups({});
+    setDismissed(new Set());
     setPatients([]);
     setOverrides({});
     setExpanded(new Set());
@@ -191,16 +190,27 @@ export function Analyzer({ storage, account }: Props) {
     await addFiles(sources);
   }, [addFiles, clearAll]);
 
-  const removePatient = (id: string) => {
-    analysisCache.current.delete(id);
-    setPatients((ps) => ps.filter((p) => p.id !== id));
-    setOverrides(({ [id]: _drop, ...rest }) => rest);
+  const removePatient = (groupId: string) => {
+    const ids = new Set(groups.find((g) => g.id === groupId)?.members.map((m) => m.id) ?? []);
+    analysisCache.current.delete(groupId);
+    setPatients((ps) => ps.filter((p) => !ids.has(p.id)));
+    setManualGroups((m) => Object.fromEntries(Object.entries(m).filter(([k]) => !ids.has(k))));
+    setOverrides(({ [groupId]: _drop, ...rest }) => rest);
     setExpanded((e) => {
       const n = new Set(e);
-      n.delete(id);
+      n.delete(groupId);
       return n;
     });
   };
+
+  const mergeSuggestion = (sg: Suggestion) => {
+    setManualGroups((m) => mergeGroups(m, sg.a, sg.b));
+    // as correções já feitas em cada lado passam para o paciente unido (as do primeiro prevalecem)
+    setOverrides(({ [sg.b.id]: fromB, ...rest }) => ({ ...rest, [sg.a.id]: { ...(fromB ?? {}), ...(rest[sg.a.id] ?? {}) } }));
+    analysisCache.current.delete(sg.a.id);
+  };
+  const dismissSuggestion = (sg: Suggestion) => setDismissed((d) => new Set(d).add(sg.key));
+  const separate = (memberId: string) => setManualGroups((m) => separateMember(m, memberId));
 
   const toggle = (id: string) =>
     setExpanded((e) => {
@@ -252,34 +262,41 @@ export function Analyzer({ storage, account }: Props) {
     }
   };
 
-  // Corrigir um valor reanalisa só aquele paciente; mudar critérios reanalisa todos.
-  const analysisCache = useRef(new Map<string, { rules: object; catalog: object; overrides: object | undefined; analysis: Analysis }>());
-  const cachedAnalysis = (p: PatientEntry): Analysis => {
-    const hit = analysisCache.current.get(p.id);
-    const ov = overrides[p.id];
-    if (hit && hit.rules === active.rules && hit.catalog === catalog && hit.overrides === ov) return hit.analysis;
-    const analysis = analyze(p.items, active.rules, catalog, ov);
-    analysisCache.current.set(p.id, { rules: active.rules, catalog, overrides: ov, analysis });
+  const groups: Group[] = useMemo(() => buildGroups(patients, manualGroups), [patients, manualGroups]);
+  const suggestions = useMemo(() => findSuggestions(groups, dismissed), [groups, dismissed]);
+
+  // Corrigir um valor reanalisa só aquele paciente; mudar critérios ou arquivos reanalisa o que mudou.
+  const analysisCache = useRef(new Map<string, { sig: string; rules: object; catalog: object; overrides: object | undefined; analysis: Analysis }>());
+  const cachedAnalysis = (g: Group, readable: Member[]): Analysis => {
+    const sig = readable.map((m) => m.id).join(",");
+    const hit = analysisCache.current.get(g.id);
+    const ov = overrides[g.id];
+    if (hit && hit.sig === sig && hit.rules === active.rules && hit.catalog === catalog && hit.overrides === ov) return hit.analysis;
+    const analysis = analyzeFiles(readable.map((m) => ({ fileName: m.fileName, items: m.items })), active.rules, catalog, ov);
+    analysisCache.current.set(g.id, { sig, rules: active.rules, catalog, overrides: ov, analysis });
     return analysis;
   };
 
   const rows: PatientRow[] = useMemo(
     () =>
-      patients.map((p) => {
-        const age = p.info.birth ? ageFrom(p.info.birth) : null;
+      groups.map((g) => {
+        const age = g.birth ? ageFrom(g.birth) : null;
+        const readable = g.members.filter((m) => !m.problem);
+        const files = g.members.map((m) => m.fileName);
         return {
-          id: p.id,
-          label: p.info.name ? formatName(p.info.name) : p.fileName.replace(/\.pdf$/i, ""),
-          fileName: p.fileName,
-          subtitle: age != null ? `${age} anos` : "",
-          birth: p.info.birth,
+          id: g.id,
+          label: g.name ? formatName(g.name) : files[0].replace(/\.pdf$/i, ""),
+          fileName: files.join(" | "),
+          subtitle: [age != null ? `${age} anos` : "", files.length > 1 ? `${files.length} arquivos` : ""].filter(Boolean).join(" · "),
+          birth: g.birth,
           age,
-          problem: p.problem,
-          analysis: p.problem ? null : cachedAnalysis(p),
+          members: g.members.map((m) => ({ id: m.id, fileName: m.fileName })),
+          problem: readable.length ? undefined : g.members[0].problem,
+          analysis: readable.length ? cachedAnalysis(g, readable) : null,
         };
       }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [patients, active.rules, catalog, overrides],
+    [groups, active.rules, catalog, overrides],
   );
   rowsRef.current = rows;
 
@@ -418,7 +435,8 @@ export function Analyzer({ storage, account }: Props) {
             <div className="patient-head">
               <div>
                 <div className="patient-name big">{single.label}</div>
-                <div className="muted">{[single.subtitle, single.fileName].filter(Boolean).join(" · ")}</div>
+                <div className="muted">{[single.subtitle, single.members.length > 1 ? "" : single.fileName].filter(Boolean).join(" · ")}</div>
+                <MembersList members={single.members} onSeparate={separate} />
               </div>
               <div className="row">
                 <button className="small" onClick={() => copySingle(single)}>{copiedSingle ? "✓ Resumo copiado" : "Copiar resumo"}</button>
@@ -440,6 +458,10 @@ export function Analyzer({ storage, account }: Props) {
           patients={rows}
           exams={exams}
           presetName={active.name}
+          suggestions={suggestions}
+          onMerge={mergeSuggestion}
+          onDismiss={dismissSuggestion}
+          onSeparate={separate}
           onPrint={startPrint}
           expanded={expanded}
           onToggle={toggle}

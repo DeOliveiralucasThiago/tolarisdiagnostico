@@ -217,3 +217,12 @@ button.link:hover:not(:disabled) { background: none; text-decoration: underline;
   .print-report tr { break-inside: avoid; }
   .print-report footer { margin-top: 16px; font-size: 11px; color: #555; border-top: 1px solid #ccc; padding-top: 6px; }
 }
+
+/* pacientes com vários arquivos */
+.suggestions { display: grid; gap: 8px; margin-bottom: 14px; }
+.suggestion { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; padding: 10px 14px; border-radius: 12px; background: var(--orange-soft); border: 1px solid color-mix(in srgb, var(--orange) 30%, transparent); font-size: 14px; }
+.members { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin: 6px 0 10px; }
+.members .file-pill { margin-top: 0; }
+.members .file-pill button { padding: 0 6px; }
+.repeated { margin-top: 4px; font-size: 12px; color: var(--muted); white-space: normal; max-width: 260px; }
+.badge { display: inline-block; padding: 1px 7px; border-radius: 999px; background: var(--orange-soft); color: var(--orange); font-weight: 700; font-size: 11px; }

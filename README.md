@@ -7,6 +7,9 @@ localiza cada exame e mostra um semáforo (verde / laranja / vermelho / cinza = 
 ## Análise em lote
 Envie vários PDFs de uma vez (um laudo por paciente). A ferramenta lê o nome e a data de nascimento do cabeçalho, analisa cada laudo com o preset escolhido e mostra uma lista ordenada do mais crítico ao menos crítico, com filtros (situação, exame alterado, busca por nome) e detalhe por paciente. Tudo acontece no navegador e **nada é guardado**: ao recarregar a página, a lista some.
 
+### Exames em arquivos separados
+Se os exames de um mesmo paciente vierem em PDFs diferentes, a ferramenta reúne os arquivos em **um só paciente** quando **nome e data de nascimento** são iguais (`src/lib/grouping.ts`). Nome igual com um dos laudos sem data de nascimento **não é unido sozinho**: aparece "Possível mesmo paciente", com **Unir** e **São pessoas diferentes**. Homônimos (nascimentos diferentes) nunca são sugeridos. Em qualquer paciente reunido, **Separar** desfaz. Cada exame vem do primeiro arquivo em que aparece; se outro arquivo trouxer o mesmo exame com valor diferente, aparece o selo "valor repetido" com o outro valor.
+
 ## Exportar resultados
 - **Baixar planilha (CSV):** uma linha por paciente (respeita os filtros), com situação geral, contagens, exames para atenção e, para cada exame do preset, valor e situação. Abre direto no Excel em português (`;` e UTF-8). Textos vindos dos PDFs são neutralizados contra fórmulas (`src/lib/export.ts`).
 - **Copiar resumo:** texto do paciente (atenção, dentro do padrão, não localizados) para colar no ASO ou em outro sistema.

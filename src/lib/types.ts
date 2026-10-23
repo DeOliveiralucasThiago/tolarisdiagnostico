@@ -43,7 +43,8 @@ export interface ExtractedResult {
   /** Faixa de referência impressa pelo laboratório, quando encontrada na mesma linha. */
   labReference?: string;
   /** Linha do PDF de onde o valor veio, para o médico conferir. */
-  source: { page: number; text: string };
+  /** `file` só aparece quando o paciente tem mais de um arquivo. */
+  source: { page: number; text: string; file?: string };
 }
 
 export interface ExtractionOutput {

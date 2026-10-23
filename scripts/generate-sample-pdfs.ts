@@ -7,6 +7,8 @@ import { mkdirSync, writeFileSync } from "node:fs";
 import path from "node:path";
 
 const OUT = path.resolve(__dirname, "../public/samples");
+// PDFs usados só nos testes (não vão para o site)
+const FIX = path.resolve(__dirname, "../tests/fixtures");
 
 type Row = [name: string, result: string, unit: string, ref: string];
 
@@ -115,6 +117,20 @@ async function main() {
   writeFileSync(path.join(OUT, "paciente-maria.pdf"), await layoutB(MARIA, ["Paciente: MARIA SOUZA", "Data de nascimento: 03/11/1990"]));
   writeFileSync(path.join(OUT, "paciente-jose.pdf"), await layoutC(JOSE, ["Nome do paciente: JOSÉ SANTOS", "Nascimento: 21/08/1978"]));
   console.log("PDFs de exemplo gerados em", OUT);
+
+  // --- fixtures de teste: exames de um mesmo paciente em arquivos separados ---
+  mkdirSync(FIX, { recursive: true });
+  const ana = ["Paciente: ANA COSTA", "Data de nascimento: 09/09/1988"];
+  writeFileSync(path.join(FIX, "ana-parte1-glicemia.pdf"), await layoutA(withValues({ "Glicose em jejum": "131", "Colesterol total": "180" }), ana));
+  writeFileSync(path.join(FIX, "ana-parte2-hemograma.pdf"), await layoutB(withValues({ Hemoglobina: "12,6", Plaquetas: "310.000", TSH: "3,1" }), ana));
+  // mesmo exame repetido com outro valor
+  writeFileSync(path.join(FIX, "ana-parte3-glicemia-repetida.pdf"), await layoutA(withValues({ "Glicose em jejum": "95" }), ana));
+  // mesma pessoa, mas o segundo laudo veio sem data de nascimento: só deve ser SUGERIDO, nunca unido sozinho
+  writeFileSync(path.join(FIX, "rui-parte1.pdf"), await layoutA(withValues({ "Glicose em jejum": "92", "Colesterol HDL": "38" }), ["Paciente: RUI ALVES", "Data de nascimento: 14/02/1980"]));
+  writeFileSync(path.join(FIX, "rui-parte2-sem-nascimento.pdf"), await layoutB(withValues({ Hemoglobina: "14,0", TSH: "2,0" }), ["CLIENTE: RUI ALVES"]));
+  // homônimo de Maria Souza (outro nascimento): nunca unir
+  writeFileSync(path.join(FIX, "maria-homonima.pdf"), await layoutA(withValues({ "Glicose em jejum": "85", Hemoglobina: "14,5" }), ["Paciente: MARIA SOUZA", "Data de nascimento: 01/01/1970"]));
+  console.log("Fixtures de teste gerados em", FIX);
 }
 
 main();

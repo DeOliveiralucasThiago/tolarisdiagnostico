@@ -7,6 +7,8 @@ import { SectionHead } from "./SectionHead";
 import type { Analysis, AnalysisRow } from "@/lib/analysis";
 import { filterAndSort, type BatchFilters, type BatchItem, type StatusFilter } from "@/lib/batch";
 import { copyText } from "@/lib/clipboard";
+import type { Suggestion } from "@/lib/grouping";
+import { formatName } from "@/lib/patient";
 import { buildBatchCsv, buildSummaryText, csvFileName, type ExportPatient } from "@/lib/export";
 import { STATUS_LABEL } from "@/lib/status";
 import type { ExamDefinition, Status } from "@/lib/types";
@@ -18,6 +20,24 @@ export interface PatientRow extends BatchItem {
   problem?: string;
   birth?: string;
   age?: number | null;
+  /** Arquivos reunidos neste paciente (mais de um quando os exames vieram em PDFs separados). */
+  members: { id: string; fileName: string }[];
+}
+
+/** Lista os arquivos reunidos em um paciente, com opção de separar. */
+export function MembersList({ members, onSeparate }: { members: { id: string; fileName: string }[]; onSeparate: (memberId: string) => void }) {
+  if (members.length < 2) return null;
+  return (
+    <div className="members">
+      <span className="muted">Arquivos reunidos neste paciente:</span>
+      {members.map((m) => (
+        <span key={m.id} className="file-pill">
+          {m.fileName}
+          <button className="small ghost" onClick={() => onSeparate(m.id)} title="Tratar este arquivo como outro paciente">Separar</button>
+        </span>
+      ))}
+    </div>
+  );
 }
 
 export const toExport = (p: PatientRow): ExportPatient => ({
@@ -29,6 +49,10 @@ interface Props {
   /** Exames configurados no preset (filtro por exame e colunas da planilha). */
   exams: ExamDefinition[];
   presetName: string;
+  suggestions: Suggestion[];
+  onMerge: (s: Suggestion) => void;
+  onDismiss: (s: Suggestion) => void;
+  onSeparate: (memberId: string) => void;
   onPrint: (kind: "patient" | "batch", ids: string[]) => void;
   expanded: Set<string>;
   onToggle: (id: string) => void;
@@ -63,7 +87,7 @@ function attentionText(a: Analysis): string {
   return flagged.length > 3 ? `${shown} · +${flagged.length - 3}` : shown;
 }
 
-export function PatientsPanel({ patients, exams, presetName, onPrint, expanded, onToggle, overrides, onOverride, onRemove, onClear }: Props) {
+export function PatientsPanel({ patients, exams, presetName, suggestions, onMerge, onDismiss, onSeparate, onPrint, expanded, onToggle, overrides, onOverride, onRemove, onClear }: Props) {
   const [filters, setFilters] = useState<BatchFilters>(DEFAULT_FILTERS);
   const visible = useMemo(() => filterAndSort(patients, filters), [patients, filters]);
 
@@ -107,6 +131,26 @@ export function PatientsPanel({ patients, exams, presetName, onPrint, expanded, 
           </div>
         }
       />
+
+      {suggestions.length > 0 && (
+        <div className="suggestions" role="status">
+          {suggestions.map((sg) => {
+            const side = (g: Suggestion["a"]) => `${g.members.map((m) => m.fileName).join(" + ")} (${g.birth ? `nasc. ${g.birth}` : "sem data de nascimento"})`;
+            return (
+              <div key={sg.key} className="suggestion">
+                <div>
+                  <strong>Possível mesmo paciente: {formatName(sg.a.name!)}.</strong>{" "}
+                  <span className="muted">{side(sg.a)} e {side(sg.b)}. Se os exames de um forem de um PDF e os do outro de outro, una para ver tudo junto.</span>
+                </div>
+                <div className="row">
+                  <button className="small primary" onClick={() => onMerge(sg)}>Unir</button>
+                  <button className="small" onClick={() => onDismiss(sg)}>São pessoas diferentes</button>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
 
       <div className="stats" aria-live="polite" data-tour="summary">
         {STATS.map((s) => (
@@ -207,6 +251,7 @@ export function PatientsPanel({ patients, exams, presetName, onPrint, expanded, 
                 a && isOpen ? (
                   <tr key={`${p.id}-detail`} className="detail-row">
                     <td colSpan={5} data-tour={idx === 0 ? "detail" : undefined}>
+                      <MembersList members={row.members} onSeparate={onSeparate} />
                       <div className="detail-actions">
                         <button className="small" onClick={() => copySummary(row)}>{copied === p.id ? "✓ Resumo copiado" : "Copiar resumo"}</button>
                         <button className="small" onClick={() => onPrint("patient", [p.id])}>Imprimir / PDF</button>

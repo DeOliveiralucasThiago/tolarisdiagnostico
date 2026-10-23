@@ -54,7 +54,7 @@ export function Results({ analysis, overrides, onOverride, embedded = false, hea
             </tr>
           </thead>
           <tbody>
-            {rows.map(({ id, exam, rule, found, status }) => (
+            {rows.map(({ id, exam, rule, found, status, alternatives }) => (
               <tr key={id} className={`row-${status}`}>
                 <td>
                   <span className={`pill ${status}`} title={STATUS_LABEL[status]}><i className={`dot ${status}`} /><span className="pill-text">{STATUS_LABEL[status]}</span></span>
@@ -72,13 +72,19 @@ export function Results({ analysis, overrides, onOverride, embedded = false, hea
                   />
                   <span className="unit">{found?.unit ?? exam.unit}</span>
                   {found?.qualifier && <span className="unit">({found.raw})</span>}
+                  {alternatives && (
+                    <div className="repeated" title="O mesmo exame veio em mais de um arquivo com valores diferentes. Vale o do primeiro arquivo enviado; confira.">
+                      <span className="badge">valor repetido</span>{" "}
+                      {alternatives.map((a) => `${String(a.value).replace(".", ",")} em ${a.file}`).join("; ")}
+                    </div>
+                  )}
                 </td>
                 <td className="muted">{found?.labReference ?? "—"}</td>
                 <td className="muted">{describeRule(rule)}</td>
                 <td>
                   {found ? (
                     <details>
-                      <summary>pág. {found.source.page}</summary>
+                      <summary>pág. {found.source.page}{found.source.file ? ` · ${found.source.file}` : ""}</summary>
                       <div className="src">{found.source.text}</div>
                     </details>
                   ) : (
