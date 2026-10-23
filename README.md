@@ -7,6 +7,11 @@ localiza cada exame e mostra um semáforo (verde / laranja / vermelho / cinza = 
 ## Análise em lote
 Envie vários PDFs de uma vez (um laudo por paciente). A ferramenta lê o nome e a data de nascimento do cabeçalho, analisa cada laudo com o preset escolhido e mostra uma lista ordenada do mais crítico ao menos crítico, com filtros (situação, exame alterado, busca por nome) e detalhe por paciente. Tudo acontece no navegador e **nada é guardado**: ao recarregar a página, a lista some.
 
+### Laudos escaneados e fotos (OCR)
+PDFs sem texto (escaneados) e imagens (JPG/PNG) passam por **reconhecimento de texto no próprio navegador** (tesseract.js, com os arquivos em `public/ocr`, copiados de `node_modules` por `scripts/copy-ocr-assets.mjs` antes do `dev`/`build`): nenhuma imagem sai do computador e nada vem de CDN de terceiros. O fluxo é: renderizar a página, **endireitar** (`estimateSkew`), ler duas vezes (imagem normal e com limiarização adaptativa) e comparar. Valores em que as duas leituras divergem, ou que destoam muito da faixa do laboratório (ex.: vírgula perdida), ganham **⚠ conferir** (`src/lib/plausibility.ts`); todo laudo lido por OCR leva um aviso, e a planilha, o resumo e a impressão registram "OCR (conferir)". Nomes de exame aproximados (ex.: `ALTITGP` → TGP) só valem em OCR.
+
+Medição com 224 valores em 21 imagens degradadas (100/200 dpi, JPEG ruim, torta, com sombra, foto de celular): 95% certos, 2% não lidos (ficam cinza), 3% errados, dos quais a maioria sinalizada. Fotos reais podem ser piores.
+
 ### Exames em arquivos separados
 Se os exames de um mesmo paciente vierem em PDFs diferentes, a ferramenta reúne os arquivos em **um só paciente** quando **nome e data de nascimento** são iguais (`src/lib/grouping.ts`). Nome igual com um dos laudos sem data de nascimento **não é unido sozinho**: aparece "Possível mesmo paciente", com **Unir** e **São pessoas diferentes**. Homônimos (nascimentos diferentes) nunca são sugeridos. Em qualquer paciente reunido, **Separar** desfaz. Cada exame vem do primeiro arquivo em que aparece; se outro arquivo trouxer o mesmo exame com valor diferente, aparece o selo "valor repetido" com o outro valor.
 

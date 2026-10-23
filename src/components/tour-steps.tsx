@@ -63,7 +63,7 @@ export function makeTourSteps({ ensureSample, openPreset, expandFirst }: { ensur
       body: (
         <>
           <p>Arraste <strong>vários PDFs de uma vez</strong> (um por paciente) ou clique para escolher. A ferramenta encontra cada exame <strong>pelo nome</strong>, mesmo que cada laboratório organize o laudo de um jeito.</p>
-          <p>Sem laudos à mão, use o botão de <strong>laudos de exemplo</strong>. Nesta versão são lidos laudos digitais; scans e fotos ainda não.</p>
+          <p>Sem laudos à mão, use o botão de <strong>laudos de exemplo</strong>. PDFs <strong>escaneados e fotos</strong> também são lidos (reconhecimento de imagem, no seu computador), mas podem ter erros: a ferramenta avisa e marca o que precisa de conferência.</p>
         </>
       ),
     },
