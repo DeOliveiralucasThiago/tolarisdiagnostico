@@ -197,3 +197,23 @@ button.link:hover:not(:disabled) { background: none; text-decoration: underline;
   .preset-summary { margin-left: 0; width: 100%; }
   .card { padding: 16px; }
 }
+
+.detail-actions { display: flex; gap: 8px; justify-content: flex-end; margin-bottom: 10px; }
+
+/* impressão / salvar em PDF */
+.print-only { display: none; }
+@media print {
+  .screen-only, .env-banner, .tour-root { display: none !important; }
+  .print-only { display: block !important; }
+  html, body { background: #fff !important; color: #000 !important; }
+  @page { margin: 14mm; }
+  .print-report { font: 12px/1.4 system-ui, sans-serif; color: #000; }
+  .print-report h1 { font-size: 18px; margin: 0 0 2px; }
+  .print-report h2 { font-size: 15px; margin: 14px 0 2px; }
+  .print-report header p, .print-report section p { margin: 0 0 10px; color: #444; }
+  .print-report table { min-width: 0; width: 100%; border-collapse: collapse; margin-top: 6px; }
+  .print-report th, .print-report td { border: 1px solid #bbb; padding: 4px 6px; text-align: left; vertical-align: top; background: #fff !important; }
+  .print-report th { background: #eee !important; text-transform: none; letter-spacing: 0; font-size: 11px; color: #000; }
+  .print-report tr { break-inside: avoid; }
+  .print-report footer { margin-top: 16px; font-size: 11px; color: #555; border-top: 1px solid #ccc; padding-top: 6px; }
+}

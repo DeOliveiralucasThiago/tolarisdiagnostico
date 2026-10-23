@@ -2,7 +2,8 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { IconLock, IconUpload, Logo } from "@/components/Icons";
-import { PatientsPanel, type PatientRow } from "@/components/PatientsPanel";
+import { PatientsPanel, toExport, type PatientRow } from "@/components/PatientsPanel";
+import { PrintReport, type PrintJob } from "@/components/PrintReport";
 import { PresetEditor } from "@/components/PresetEditor";
 import { SectionHead } from "@/components/SectionHead";
 import { Tour } from "@/components/Tour";
@@ -11,6 +12,8 @@ import { Results } from "@/components/Results";
 import { catalogWith } from "@/lib/custom-exams";
 import { analyze, type Analysis } from "@/lib/analysis";
 import { filterAndSort } from "@/lib/batch";
+import { copyText } from "@/lib/clipboard";
+import { buildSummaryText } from "@/lib/export";
 import { ageFrom, formatName, parsePatient, type PatientInfo } from "@/lib/patient";
 import { readPdfInBrowser } from "@/lib/pdf-browser";
 import { DEFAULT_PRESET, loadActivePresetId, newId, pickActivePreset, saveActivePresetId, type Preset } from "@/lib/presets";
@@ -58,6 +61,8 @@ export function Analyzer({ storage, account }: Props) {
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [progress, setProgress] = useState<{ done: number; total: number } | null>(null);
   const [over, setOver] = useState(false);
+  const [printJob, setPrintJob] = useState<PrintJob | null>(null);
+  const [copiedSingle, setCopiedSingle] = useState(false);
   const [tourOpen, setTourOpen] = useState(false);
   const [presetOpen, setPresetOpen] = useState(true);
   const [ready, setReady] = useState(false);
@@ -267,6 +272,8 @@ export function Analyzer({ storage, account }: Props) {
           label: p.info.name ? formatName(p.info.name) : p.fileName.replace(/\.pdf$/i, ""),
           fileName: p.fileName,
           subtitle: age != null ? `${age} anos` : "",
+          birth: p.info.birth,
+          age,
           problem: p.problem,
           analysis: p.problem ? null : cachedAnalysis(p),
         };
@@ -278,14 +285,43 @@ export function Analyzer({ storage, account }: Props) {
 
   const exams = Object.keys(active.rules)
     .map((id) => catalog.find((e) => e.id === id))
-    .filter((e): e is ExamDefinition => !!e)
-    .map((e) => ({ id: e.id, name: e.name }));
+    .filter((e): e is ExamDefinition => !!e);
 
   const setOverride = (patientId: string, examId: string, value: string) =>
     setOverrides((o) => ({ ...o, [patientId]: { ...(o[patientId] ?? {}), [examId]: value } }));
 
+  // Imprime / salva em PDF: monta o relatório oculto e abre o diálogo de impressão do navegador.
+  const printDate = useRef(new Date());
+  const startPrint = (kind: PrintJob["kind"], ids: string[]) => {
+    printDate.current = new Date();
+    setPrintJob({ kind, ids });
+  };
+  useEffect(() => {
+    if (!printJob) return;
+    const title = document.title;
+    const first = rowsRef.current.find((r) => r.id === printJob.ids[0]);
+    document.title = printJob.kind === "patient" && first ? `Triagem - ${first.label}` : "Triagem de exames";
+    const done = () => {
+      document.title = title;
+      setPrintJob(null);
+    };
+    window.addEventListener("afterprint", done, { once: true });
+    const t = setTimeout(() => window.print(), 60);
+    return () => {
+      clearTimeout(t);
+      window.removeEventListener("afterprint", done);
+      document.title = title;
+    };
+  }, [printJob]);
+
   const busy = progress !== null;
   const single = rows.length === 1 ? rows[0] : null;
+  const copySingle = async (p: PatientRow) => {
+    if (await copyText(buildSummaryText(toExport(p), active.name))) {
+      setCopiedSingle(true);
+      setTimeout(() => setCopiedSingle(false), 2500);
+    }
+  };
 
   if (!ready) {
     return (
@@ -296,7 +332,8 @@ export function Analyzer({ storage, account }: Props) {
   }
 
   return (
-    <main>
+    <>
+    <main className="screen-only">
       <header className="header">
         <div className="brand">
           <Logo size={38} />
@@ -383,7 +420,11 @@ export function Analyzer({ storage, account }: Props) {
                 <div className="patient-name big">{single.label}</div>
                 <div className="muted">{[single.subtitle, single.fileName].filter(Boolean).join(" · ")}</div>
               </div>
-              <button className="small ghost" onClick={() => removePatient(single.id)}>Remover</button>
+              <div className="row">
+                <button className="small" onClick={() => copySingle(single)}>{copiedSingle ? "✓ Resumo copiado" : "Copiar resumo"}</button>
+                <button className="small" onClick={() => startPrint("patient", [single.id])}>Imprimir / PDF</button>
+                <button className="small ghost" onClick={() => removePatient(single.id)}>Remover</button>
+              </div>
             </div>
           }
         />
@@ -398,6 +439,8 @@ export function Analyzer({ storage, account }: Props) {
         <PatientsPanel
           patients={rows}
           exams={exams}
+          presetName={active.name}
+          onPrint={startPrint}
           expanded={expanded}
           onToggle={toggle}
           overrides={overrides}
@@ -409,5 +452,11 @@ export function Analyzer({ storage, account }: Props) {
       <p className="app-foot">Ferramenta de apoio à triagem. A interpretação e a decisão clínica são sempre do médico.</p>
       {tourOpen && <Tour steps={tourSteps} onClose={closeTour} />}
     </main>
+    {printJob && (
+      <div className="print-only">
+        <PrintReport job={printJob} rows={rows} presetName={active.name} date={printDate.current} />
+      </div>
+    )}
+    </>
   );
 }

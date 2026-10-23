@@ -1,25 +1,35 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { IconX } from "./Icons";
+import { IconDownload, IconX } from "./Icons";
 import { Results } from "./Results";
 import { SectionHead } from "./SectionHead";
 import type { Analysis, AnalysisRow } from "@/lib/analysis";
 import { filterAndSort, type BatchFilters, type BatchItem, type StatusFilter } from "@/lib/batch";
+import { copyText } from "@/lib/clipboard";
+import { buildBatchCsv, buildSummaryText, csvFileName, type ExportPatient } from "@/lib/export";
 import { STATUS_LABEL } from "@/lib/status";
-import type { Status } from "@/lib/types";
+import type { ExamDefinition, Status } from "@/lib/types";
 
 export interface PatientRow extends BatchItem {
   /** "33 anos" etc. */
   subtitle: string;
   /** Motivo, quando o PDF não pôde ser analisado. */
   problem?: string;
+  birth?: string;
+  age?: number | null;
 }
+
+export const toExport = (p: PatientRow): ExportPatient => ({
+  label: p.label, birth: p.birth, age: p.age, fileName: p.fileName, analysis: p.analysis, problem: p.problem,
+});
 
 interface Props {
   patients: PatientRow[];
-  /** Exames configurados no preset, para o filtro por exame. */
-  exams: { id: string; name: string }[];
+  /** Exames configurados no preset (filtro por exame e colunas da planilha). */
+  exams: ExamDefinition[];
+  presetName: string;
+  onPrint: (kind: "patient" | "batch", ids: string[]) => void;
   expanded: Set<string>;
   onToggle: (id: string) => void;
   overrides: Record<string, Record<string, string>>;
@@ -53,13 +63,32 @@ function attentionText(a: Analysis): string {
   return flagged.length > 3 ? `${shown} · +${flagged.length - 3}` : shown;
 }
 
-export function PatientsPanel({ patients, exams, expanded, onToggle, overrides, onOverride, onRemove, onClear }: Props) {
+export function PatientsPanel({ patients, exams, presetName, onPrint, expanded, onToggle, overrides, onOverride, onRemove, onClear }: Props) {
   const [filters, setFilters] = useState<BatchFilters>(DEFAULT_FILTERS);
   const visible = useMemo(() => filterAndSort(patients, filters), [patients, filters]);
 
   const byWorst = (s: Status) => patients.filter((p) => p.analysis?.worst === s).length;
   const unreadable = patients.filter((p) => !p.analysis).length;
   const chipCount = (v: StatusFilter) => filterAndSort(patients, { ...DEFAULT_FILTERS, status: v }).length;
+  const [copied, setCopied] = useState<string | null>(null);
+
+  const downloadCsv = () => {
+    const blob = new Blob([buildBatchCsv(visible.map(toExport), exams)], { type: "text/csv;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = csvFileName();
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  };
+
+  const copySummary = async (p: PatientRow) => {
+    if (await copyText(buildSummaryText(toExport(p), presetName))) {
+      setCopied(p.id);
+      setTimeout(() => setCopied((c) => (c === p.id ? null : c)), 2500);
+    }
+  };
+
   const filtered = filters.status !== "all" || filters.query !== "" || filters.examId !== "";
 
   return (
@@ -68,7 +97,15 @@ export function PatientsPanel({ patients, exams, expanded, onToggle, overrides, 
         n={3}
         title={`Resultado da análise · ${patients.length} pacientes`}
         hint="Do mais crítico ao mais tranquilo. Abra um paciente para conferir os valores e corrigir, se necessário."
-        right={<button className="small" onClick={onClear}>Limpar tudo</button>}
+        right={
+          <div className="row">
+            <button className="small" onClick={downloadCsv} disabled={visible.length === 0} title="Abre direto no Excel">
+              <IconDownload width={16} height={16} /> Baixar planilha ({visible.length})
+            </button>
+            <button className="small" onClick={() => onPrint("batch", visible.map((p) => p.id))} disabled={visible.length === 0}>Imprimir / PDF</button>
+            <button className="small ghost" onClick={onClear}>Limpar tudo</button>
+          </div>
+        }
       />
 
       <div className="stats" aria-live="polite" data-tour="summary">
@@ -170,6 +207,10 @@ export function PatientsPanel({ patients, exams, expanded, onToggle, overrides, 
                 a && isOpen ? (
                   <tr key={`${p.id}-detail`} className="detail-row">
                     <td colSpan={5} data-tour={idx === 0 ? "detail" : undefined}>
+                      <div className="detail-actions">
+                        <button className="small" onClick={() => copySummary(row)}>{copied === p.id ? "✓ Resumo copiado" : "Copiar resumo"}</button>
+                        <button className="small" onClick={() => onPrint("patient", [p.id])}>Imprimir / PDF</button>
+                      </div>
                       <Results
                         embedded
                         analysis={a}
