@@ -56,5 +56,27 @@ await check("Visitante NÃO consegue gravar preset", async () => {
   return !r.ok;
 });
 
+await check("Migração 0002 (convites e equipe) aplicada", async () => {
+  const r = await fetch(`${url}/rest/v1/invites?select=id&limit=1`, { headers });
+  return r.status !== 404; // 404 = tabela inexistente: falta rodar supabase/migrations/0002_invites.sql
+});
+
+await check("Visitante NÃO consegue ler convites", async () => {
+  const r = await fetch(`${url}/rest/v1/invites?select=id,email&limit=1`, { headers });
+  if (!r.ok) return true;
+  return (await r.json()).length === 0;
+});
+
+await check("Visitante NÃO consegue aceitar convite", async () => {
+  const r = await fetch(`${url}/rest/v1/rpc/accept_invite`, { method: "POST", headers, body: JSON.stringify({ invite_token: "x".repeat(32) }) });
+  return !r.ok;
+});
+
+await check("Visitante NÃO consegue listar a equipe de uma clínica", async () => {
+  const r = await fetch(`${url}/rest/v1/rpc/clinic_members`, { method: "POST", headers, body: JSON.stringify({ c: "00000000-0000-0000-0000-000000000000" }) });
+  if (!r.ok) return true;
+  return (await r.json()).length === 0;
+});
+
 for (const [ok, name] of results) console.log(`${ok ? "✔" : "✘"} ${name}`);
 process.exit(results.every(([ok]) => ok) ? 0 : 1);

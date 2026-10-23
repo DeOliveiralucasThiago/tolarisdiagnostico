@@ -26,9 +26,10 @@ const COPY: Record<Mode, { title: string; hint: string; cta: string }> = {
   forgot: { title: "Recuperar senha", hint: "Informe o seu e-mail e enviaremos um link para criar uma nova senha.", cta: "Enviar link" },
 };
 
-export function AuthForm() {
-  const [mode, setMode] = useState<Mode>("login");
-  const [email, setEmail] = useState("");
+export function AuthForm({ invite }: { invite?: { email?: string } | null }) {
+  // quem chega por um convite normalmente ainda não tem conta: abre em "Criar conta"
+  const [mode, setMode] = useState<Mode>(invite ? "signup" : "login");
+  const [email, setEmail] = useState(invite?.email ?? "");
   const [password, setPassword] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -76,6 +77,11 @@ export function AuthForm() {
           <button role="tab" aria-selected={mode === "login"} className={mode === "login" ? "on" : ""} onClick={() => go("login")} type="button">Entrar</button>
           <button role="tab" aria-selected={mode === "signup"} className={mode === "signup" ? "on" : ""} onClick={() => go("signup")} type="button">Criar conta</button>
         </div>
+      )}
+      {invite && (
+        <p className="notice" role="status" style={{ marginBottom: 14 }}>
+          <strong>Você recebeu um convite para entrar em uma clínica.</strong> Crie sua conta (ou entre) usando {invite.email ? <strong>{invite.email}</strong> : "o mesmo e-mail que recebeu o convite"}: o convite só vale para esse e-mail.
+        </p>
       )}
       <h2 className="auth-title">{c.title}</h2>
       <p className="muted" style={{ marginBottom: 18 }}>{c.hint}</p>

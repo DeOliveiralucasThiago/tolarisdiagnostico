@@ -6,7 +6,7 @@ o PDF é lido só no navegador; o banco guarda apenas contas, clínicas e crité
 
 ## 1. Supabase (banco e login)
 1. Crie o projeto em https://supabase.com (região mais próxima, ex.: São Paulo).
-2. **SQL Editor** → cole e rode `supabase/migrations/0001_init.sql`.
+2. **SQL Editor** → cole e rode `supabase/migrations/0001_init.sql` e, depois, `supabase/migrations/0002_invites.sql` (convite de médicos).
 3. **Project Settings → API**: anote a **Project URL** e a chave **anon / publishable**.
    Nunca use a chave `service_role` no app.
 4. Verifique: `npm run check:supabase` (com as duas variáveis em `.env.local`). Todos os itens devem sair ✔.
@@ -46,11 +46,12 @@ Em **Authentication → Emails → Templates**, cole o conteúdo de `supabase/te
 - [ ] Abrir em outro navegador/aba anônima, entrar com a mesma conta: os presets são os mesmos.
 - [ ] Criar uma segunda conta (outro e-mail) e outra clínica: ela **não** vê os presets da primeira.
 - [ ] Usar "Esqueci minha senha": chega o e-mail, o link abre a tela de nova senha e, depois de salvar, o app abre.
+- [ ] Como administrador, abrir **Equipe**, convidar um segundo e-mail seu, abrir o link em outra janela anônima, criar a conta e ver que ele cai na mesma clínica (e que o botão Equipe não aparece para ele).
 - [ ] Enviar um PDF fictício (botão "Testar com um laudo de exemplo") e conferir o semáforo.
 - [ ] Na aba Network do navegador, confirmar que o PDF não é enviado a nenhum servidor.
 
 ## Limitações conhecidas desta versão
-Não há ainda convite de outros médicos para a mesma clínica.
+O convite de médicos usa links pessoais (copiar ou enviar pelo seu programa de e-mail); o e-mail automático do convite fica para uma próxima etapa.
 
 "Esqueci minha senha" já existe na tela de login: o link enviado por e-mail abre uma tela para criar a nova senha.
 Para isso funcionar, a URL do site precisa estar em **Authentication → URL Configuration** (Site URL e Redirect URLs)

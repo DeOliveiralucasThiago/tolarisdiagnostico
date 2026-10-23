@@ -24,6 +24,13 @@ Tudo é gerado no navegador; nada é enviado a servidor.
 ## Faixas por sexo e idade
 Em cada exame do preset, **＋ Sexo / idade** adiciona faixas específicas (sexo e/ou idade mínima e máxima, inclusivas), com os mesmos limites de laranja e vermelho. Vale a **primeira faixa que combinar** com o paciente; se nenhuma combinar, vale a **faixa geral** (`src/lib/status.ts`, `resolveRule`). O sexo vem do laudo quando ele informa ("Sexo: Feminino"), ou o médico escolhe por paciente (coluna **Sexo**): ele **nunca é deduzido pelo nome**. Laudos do mesmo paciente com sexos diferentes pedem a escolha do médico. A idade é calculada **na data do exame** (coleta/entrada, quando consta no laudo; senão, hoje). Faixa específica sem o dado do paciente é pulada e a tela avisa; exame que só tem faixas por sexo e sexo desconhecido fica **cinza**, nunca verde. A planilha traz a coluna Sexo, e a tela mostra qual faixa valeu ("Mulheres: laranja < 12 …").
 
+## Convite de médicos e equipe da clínica
+O **administrador** da clínica abre **Equipe** e convida um colega pelo e-mail: o app gera um **link pessoal** (vale 7 dias, uso único, só funciona com aquele e-mail), que pode ser copiado ou enviado por e-mail (abre o programa de e-mail do administrador). O convidado abre o link, cria a conta (ou entra) com o e-mail convidado e passa a usar os **mesmos critérios** da clínica. Papéis: **Médico** (usa e edita critérios) e **Administrador** (também convida, muda papéis e remove pessoas). Quem participa de mais de uma clínica escolhe a clínica no topo. Em **Equipe** também se listam as pessoas, os convites pendentes (com **Revogar**) e se remove alguém (a pessoa perde o acesso, mas a conta continua).
+
+Segurança (`supabase/migrations/0002_invites.sql`, testada em Postgres real em `tests/invites.test.ts`): o segredo do convite é gerado no navegador de quem convida e **só o hash SHA-256 vai ao banco**; aceitar o convite exige o segredo **e** o e-mail da conta igual ao convidado; é de uso único, expira e pode ser revogado; só administradores da clínica criam convites, veem a equipe e mudam papéis, tudo imposto por regras do banco (RLS e funções), não só pela tela; a clínica nunca fica sem administrador. O segredo sai da barra de endereço assim que a página abre.
+
+**Para ativar:** rode `supabase/migrations/0002_invites.sql` no SQL Editor do Supabase (uma vez) e confira com `npm run check:supabase`. A URL do site precisa estar em Authentication → URL Configuration.
+
 ## Presets: criar, baixar e importar
 Em **Criar preset** o médico monta um novo conjunto de critérios (cópia do atual ou em branco). **Baixar este preset / Baixar todos** gera um arquivo `.json` só com critérios e os exames personalizados usados (nunca dados de pacientes), e **Importar arquivo** o carrega em outro computador, sem sobrescrever nada (`src/lib/preset-file.ts`, com validação rigorosa do arquivo recebido).
 
@@ -57,4 +64,4 @@ Para publicar um ambiente de testes (Render + Supabase + Brevo para e-mails), ve
 `npm test` inclui testes de isolamento entre clínicas que rodam a migração em um Postgres real (PGlite).
 
 ## Próximos passos
-Validar com laudos reais anonimizados, ampliar o catálogo/sinônimos, convite de outros médicos para a clínica, cobrança/planos.
+Validar com laudos reais anonimizados, ampliar o catálogo/sinônimos, e-mail automático do convite (função no servidor com a chave do Brevo), cobrança/planos.

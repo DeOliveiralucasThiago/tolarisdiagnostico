@@ -9,6 +9,8 @@ import { SectionHead } from "@/components/SectionHead";
 import { Tour } from "@/components/Tour";
 import { makeTourSteps } from "@/components/tour-steps";
 import { Results } from "@/components/Results";
+import { TeamPanel } from "@/components/TeamPanel";
+import type { Role, TeamApi } from "@/lib/cloud-store";
 import { catalogWith } from "@/lib/custom-exams";
 import { analyzeFiles, type Analysis } from "@/lib/analysis";
 import { filterAndSort } from "@/lib/batch";
@@ -35,7 +37,13 @@ const DEFAULT_ORDER = { status: "all", query: "", examId: "", sort: "critical" }
 
 export interface Account {
   email: string;
+  userId: string;
   clinicName: string;
+  role: Role;
+  clinics: { id: string; name: string }[];
+  clinicId: string;
+  onSwitchClinic: (id: string) => void;
+  team: TeamApi;
   onSignOut: () => void;
 }
 
@@ -61,6 +69,7 @@ export function Analyzer({ storage, account }: Props) {
   const [dismissed, setDismissed] = useState<ReadonlySet<string>>(new Set());
   const [progress, setProgress] = useState<{ done: number; total: number; note?: string } | null>(null);
   const [over, setOver] = useState(false);
+  const [teamOpen, setTeamOpen] = useState(false);
   const [printJob, setPrintJob] = useState<PrintJob | null>(null);
   const [copiedSingle, setCopiedSingle] = useState(false);
   const [tourOpen, setTourOpen] = useState(false);
@@ -386,11 +395,19 @@ export function Analyzer({ storage, account }: Props) {
           </div>
         </div>
         <div className="header-actions">
-          {account && (
+          {account && account.clinics.length > 1 && (
+            <select className="clinic-select" value={account.clinicId} onChange={(e) => account.onSwitchClinic(e.target.value)} aria-label="Clínica" title={account.email}>
+              {account.clinics.map((c) => (
+                <option key={c.id} value={c.id}>{c.name}</option>
+              ))}
+            </select>
+          )}
+          {account && account.clinics.length <= 1 && (
             <span className="chip" title={account.email}>
               <strong>{account.clinicName}</strong>
             </span>
           )}
+          {account?.role === "admin" && <button onClick={() => setTeamOpen(true)}>Equipe</button>}
           <button className="ghost" onClick={() => setTourOpen(true)}>Ver tour</button>
           {account && <button onClick={account.onSignOut}>Sair</button>}
         </div>
@@ -507,6 +524,7 @@ export function Analyzer({ storage, account }: Props) {
       )}
       <p className="app-foot">Ferramenta de apoio à triagem. A interpretação e a decisão clínica são sempre do médico.</p>
       {tourOpen && <Tour steps={tourSteps} onClose={closeTour} />}
+      {teamOpen && account && <TeamPanel api={account.team} myUserId={account.userId} clinicName={account.clinicName} onClose={() => setTeamOpen(false)} />}
     </main>
     {printJob && (
       <div className="print-only">
