@@ -44,7 +44,7 @@ export function PrintReport({ job, rows, presetName, date }: Props) {
         list.map((p) => (
           <section key={p.id}>
             <h2>{p.label}{p.subtitle ? ` · ${p.subtitle}` : ""}</h2>
-            <p>Arquivo: {p.fileName}</p>
+            <p>Arquivo: {p.fileName}{p.ocr ? " · lido por reconhecimento de imagem (OCR): confira os valores com o original" : ""}</p>
             {p.analysis ? (
               <table>
                 <thead>

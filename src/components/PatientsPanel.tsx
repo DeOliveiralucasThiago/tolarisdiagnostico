@@ -22,6 +22,18 @@ export interface PatientRow extends BatchItem {
   age?: number | null;
   /** Arquivos reunidos neste paciente (mais de um quando os exames vieram em PDFs separados). */
   members: { id: string; fileName: string }[];
+  /** Algum arquivo foi lido por reconhecimento de imagem (OCR). */
+  ocr: boolean;
+}
+
+/** Aviso para laudos lidos por OCR (foto ou escaneado): números podem vir errados. */
+export function OcrNotice() {
+  return (
+    <p className="ocr-warning" role="note">
+      <strong>Lido por reconhecimento de imagem (OCR).</strong> Esse método pode errar números e letras (por exemplo, 5,9 lido como 59).
+      Confira cada valor com o laudo original antes de decidir.
+    </p>
+  );
 }
 
 /** Lista os arquivos reunidos em um paciente, com opção de separar. */
@@ -41,7 +53,7 @@ export function MembersList({ members, onSeparate }: { members: { id: string; fi
 }
 
 export const toExport = (p: PatientRow): ExportPatient => ({
-  label: p.label, birth: p.birth, age: p.age, fileName: p.fileName, analysis: p.analysis, problem: p.problem,
+  label: p.label, birth: p.birth, age: p.age, fileName: p.fileName, analysis: p.analysis, problem: p.problem, ocr: p.ocr,
 });
 
 interface Props {
@@ -214,7 +226,7 @@ export function PatientsPanel({ patients, exams, presetName, suggestions, onMerg
               return [
                 <tr key={p.id} className={a ? `row-${a.worst}` : "row-unknown"}>
                   <td>
-                    <div className="patient-name">{p.label}</div>
+                    <div className="patient-name">{p.label}{row.ocr && <span className="badge" title="Lido por reconhecimento de imagem (OCR): confira os valores"> OCR</span>}{a?.rows.some((r) => r.suspect) && <span className="badge" title="Há valores que destoam da faixa do laboratório: provável erro de leitura"> ⚠ conferir</span>}</div>
                     <div className="muted">{[row.subtitle, p.fileName].filter(Boolean).join(" · ")}</div>
                   </td>
                   <td>
@@ -251,6 +263,7 @@ export function PatientsPanel({ patients, exams, presetName, suggestions, onMerg
                 a && isOpen ? (
                   <tr key={`${p.id}-detail`} className="detail-row">
                     <td colSpan={5} data-tour={idx === 0 ? "detail" : undefined}>
+                      {row.ocr && <OcrNotice />}
                       <MembersList members={row.members} onSeparate={onSeparate} />
                       <div className="detail-actions">
                         <button className="small" onClick={() => copySummary(row)}>{copied === p.id ? "✓ Resumo copiado" : "Copiar resumo"}</button>

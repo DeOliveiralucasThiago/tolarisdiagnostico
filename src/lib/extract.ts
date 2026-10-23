@@ -86,13 +86,30 @@ interface LabelMatch {
   end: number; // índice do primeiro token depois do nome
 }
 
-function matchLabel(row: Row, aliases: Alias[]): LabelMatch | null {
+function editDistance(a: string, b: string): number {
+  let prev = Array.from({ length: b.length + 1 }, (_, j) => j);
+  for (let i = 1; i <= a.length; i++) {
+    const cur = [i];
+    for (let j = 1; j <= b.length; j++) cur[j] = Math.min(prev[j] + 1, cur[j - 1] + 1, prev[j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1));
+    prev = cur;
+  }
+  return prev[b.length];
+}
+
+/** Em texto de OCR, uma letra trocada ("ALT/TGP" lido como "ALTITGP") não deve esconder o exame. Só para nomes longos. */
+const similar = (a: string, b: string) => a.length >= 5 && b.length >= 5 && Math.abs(a.length - b.length) <= 1 && editDistance(a, b) <= 1;
+
+function matchLabel(row: Row, aliases: Alias[], fuzzy = false): LabelMatch | null {
+  return matchLabelWith(row, aliases, (a, b) => a === b) ?? (fuzzy ? matchLabelWith(row, aliases, (a, b) => a === b || similar(a, b)) : null);
+}
+
+function matchLabelWith(row: Row, aliases: Alias[], same: (token: string, alias: string) => boolean): LabelMatch | null {
   const norms = row.tokens.map((t) => t.norm);
   let best: { alias: Alias; start: number } | null = null;
 
   for (const alias of aliases) {
     for (let start = 0; start <= Math.min(MAX_LABEL_OFFSET, norms.length - alias.tokens.length); start++) {
-      if (!alias.tokens.every((t, k) => norms[start + k] === t)) continue;
+      if (!alias.tokens.every((t, k) => same(norms[start + k], t))) continue;
       if (alias.def.exclude?.length) {
         const around = [...norms.slice(Math.max(0, start - 3), start), ...norms.slice(start + alias.tokens.length, start + alias.tokens.length + 2)];
         if (around.some((n) => alias.def.exclude!.includes(n))) continue;
@@ -256,7 +273,13 @@ function headerFor(row: Row, headers: Header[]): number | undefined {
  * `examIds` restringe a busca aos exames configurados pelo médico; sem ele, procura todos do catálogo.
  * `catalog` inclui os exames personalizados criados pelo médico.
  */
-export function extractResults(items: TextItem[], examIds?: string[], catalog: ExamDefinition[] = EXAMS): ExtractionOutput {
+export function extractResults(
+  items: TextItem[],
+  examIds?: string[],
+  catalog: ExamDefinition[] = EXAMS,
+  options: { fuzzy?: boolean } = {},
+): ExtractionOutput {
+  const fuzzy = options.fuzzy ?? false;
   const defs = examIds ? catalog.filter((e) => examIds.includes(e.id)) : catalog;
   const aliases = buildAliases(defs);
   const rows = buildRows(items);
@@ -264,7 +287,7 @@ export function extractResults(items: TextItem[], examIds?: string[], catalog: E
   const found = new Map<string, ExtractedResult>();
 
   rows.forEach((row, index) => {
-    const label = matchLabel(row, aliases);
+    const label = matchLabel(row, aliases, fuzzy);
     if (!label || found.has(label.def.id)) return;
 
     let sc = scan(row.tokens, label.end);
@@ -274,7 +297,7 @@ export function extractResults(items: TextItem[], examIds?: string[], catalog: E
     if (sc.candidates.length === 0) {
       for (let k = 1; k <= LOOKAHEAD_ROWS; k++) {
         const next = rows[index + k];
-        if (!next || next.page !== row.page || matchLabel(next, aliases)) break;
+        if (!next || next.page !== row.page || matchLabel(next, aliases, fuzzy)) break;
         const nextScan = scan(next.tokens, 0);
         if (nextScan.candidates.length) {
           sc = { candidates: nextScan.candidates, reference: sc.reference.length ? sc.reference : nextScan.reference };
@@ -293,7 +316,7 @@ export function extractResults(items: TextItem[], examIds?: string[], catalog: E
       const last = rows.indexOf(sourceRows[sourceRows.length - 1]);
       for (let k = 1; k <= LOOKAHEAD_ROWS; k++) {
         const next = rows[last + k];
-        if (!next || next.page !== row.page || matchLabel(next, aliases)) break;
+        if (!next || next.page !== row.page || matchLabel(next, aliases, fuzzy)) break;
         const first = next.tokens[0]?.norm;
         if (first === "vr" || first === "valor" || first === "valores" || first?.startsWith("refer")) {
           const text = next.text.replace(/^(valor(?:es)?\s+de\s+refer\S*|valor\s+de|valor(?:es)?|vr|refer\S*)\s*:?\s*/i, "").slice(0, 90);

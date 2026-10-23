@@ -10,6 +10,8 @@ export interface ExportPatient {
   analysis: Analysis | null;
   /** Motivo, quando o PDF não pôde ser lido. */
   problem?: string;
+  /** Lido por reconhecimento de imagem (OCR). */
+  ocr?: boolean;
 }
 
 const dec = (n: number | null | undefined) => (n == null || Number.isNaN(n) ? "" : String(n).replace(".", ","));
@@ -41,7 +43,7 @@ export function attentionList(a: Analysis): string {
  */
 export function buildBatchCsv(patients: ExportPatient[], exams: ExamDefinition[]): string {
   const head = [
-    "Paciente", "Data de nascimento", "Idade", "Arquivo", "Situação geral", "Vermelhos", "Laranjas", "Verdes", "Não localizados", "Para atenção",
+    "Paciente", "Data de nascimento", "Idade", "Arquivo", "Leitura", "Situação geral", "Vermelhos", "Laranjas", "Verdes", "Não localizados", "Para atenção",
     ...exams.flatMap((e) => [`${e.name}${e.unit ? ` (${e.unit})` : ""}`, `${e.name} - situação`]),
   ];
   const lines = [head.map(csvCell).join(";")];
@@ -50,6 +52,7 @@ export function buildBatchCsv(patients: ExportPatient[], exams: ExamDefinition[]
     const a = p.analysis;
     const cells: string[] = [
       safeText(p.label), p.birth ?? "", p.age != null ? String(p.age) : "", safeText(p.fileName),
+      p.ocr ? "OCR (conferir)" : "Texto do PDF",
       a ? overall(a.worst) : "Não lido",
       a ? String(a.counts.red) : "", a ? String(a.counts.orange) : "", a ? String(a.counts.green) : "", a ? String(a.counts.unknown) : "",
       a ? safeText(attentionList(a)) : safeText(p.problem ?? ""),
@@ -86,6 +89,7 @@ export function buildSummaryText(p: ExportPatient, presetName: string, date: Dat
     const missing = by("unknown");
     if (missing.length) out.push("NÃO LOCALIZADOS NO LAUDO", ...missing.map((r) => `• ${r.exam.name}`), "");
   }
+  if (p.ocr) out.push("Atenção: laudo lido por reconhecimento de imagem (OCR), que pode errar números. Confira com o original.");
   out.push("Resultados lidos automaticamente do laudo; a conferência e a interpretação clínica são do médico.");
   return out.join("\n");
 }

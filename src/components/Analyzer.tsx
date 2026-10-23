@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { IconLock, IconUpload, Logo } from "@/components/Icons";
-import { MembersList, PatientsPanel, toExport, type PatientRow } from "@/components/PatientsPanel";
+import { MembersList, OcrNotice, PatientsPanel, toExport, type PatientRow } from "@/components/PatientsPanel";
 import { PrintReport, type PrintJob } from "@/components/PrintReport";
 import { PresetEditor } from "@/components/PresetEditor";
 import { SectionHead } from "@/components/SectionHead";
@@ -16,7 +16,8 @@ import { copyText } from "@/lib/clipboard";
 import { buildSummaryText } from "@/lib/export";
 import { buildGroups, findSuggestions, mergeGroups, separateMember, type Group, type Member, type Suggestion } from "@/lib/grouping";
 import { ageFrom, formatName, parsePatient } from "@/lib/patient";
-import { readPdfInBrowser } from "@/lib/pdf-browser";
+import { terminateOcr } from "@/lib/ocr-browser";
+import { isImageFile, isPdfFile, readFileInBrowser } from "@/lib/pdf-browser";
 import { DEFAULT_PRESET, loadActivePresetId, newId, pickActivePreset, saveActivePresetId, type Preset } from "@/lib/presets";
 import type { Storage } from "@/lib/storage";
 import type { ExamDefinition, TextItem } from "@/lib/types";
@@ -56,7 +57,7 @@ export function Analyzer({ storage, account }: Props) {
   // união de arquivos do mesmo paciente: escolhas do médico sobre a regra automática
   const [manualGroups, setManualGroups] = useState<Record<string, string>>({});
   const [dismissed, setDismissed] = useState<ReadonlySet<string>>(new Set());
-  const [progress, setProgress] = useState<{ done: number; total: number } | null>(null);
+  const [progress, setProgress] = useState<{ done: number; total: number; note?: string } | null>(null);
   const [over, setOver] = useState(false);
   const [printJob, setPrintJob] = useState<PrintJob | null>(null);
   const [copiedSingle, setCopiedSingle] = useState(false);
@@ -149,15 +150,24 @@ export function Analyzer({ storage, account }: Props) {
       const s = sources[i];
       const id = newId();
       try {
-        const items = await readPdfInBrowser(s.source);
+        const r = await readFileInBrowser(s.source, s.name, {
+          onStatus: (note) => setProgress((p) => (p ? { ...p, note } : p)),
+        });
         added[i] =
-          items.length === 0
-            ? { id, fileName: s.name, items, info: {}, problem: "Sem texto selecionável (provavelmente é um scan ou foto)." }
-            : { id, fileName: s.name, items, info: parsePatient(items) };
-      } catch {
-        added[i] = { id, fileName: s.name, items: [], info: {}, problem: "Não foi possível ler este PDF (protegido por senha ou corrompido?)." };
+          r.items.length === 0
+            ? { id, fileName: s.name, items: [], info: {}, ocr: r.ocr, problem: r.ocr ? "Não foi possível reconhecer texto neste arquivo (imagem muito escura, torta ou de baixa qualidade?)." : "Sem texto no arquivo." }
+            : { id, fileName: s.name, items: r.items, info: parsePatient(r.items), ocr: r.ocr };
+      } catch (e) {
+        const msg = (e as Error).message ?? "";
+        added[i] = {
+          id,
+          fileName: s.name,
+          items: [],
+          info: {},
+          problem: /mais de \d+ páginas/.test(msg) ? `${msg}.` : "Não foi possível ler este arquivo (protegido por senha, corrompido ou formato não suportado).",
+        };
       }
-      setProgress({ done: ++done, total: sources.length });
+      setProgress((p) => ({ ...(p ?? { total: sources.length }), done: ++done, total: sources.length }));
     };
 
     // lê alguns PDFs ao mesmo tempo para aproveitar os núcleos do computador
@@ -168,10 +178,11 @@ export function Analyzer({ storage, account }: Props) {
 
     setPatients((prev) => [...prev, ...added]);
     setProgress(null);
+    void terminateOcr(); // libera a memória do OCR ao terminar o lote
   }, []);
 
   const addFileList = (files: FileList | File[]) =>
-    addFiles(Array.from(files).filter((f) => f.type === "application/pdf" || /\.pdf$/i.test(f.name)).map((f) => ({ source: f, name: f.name })));
+    addFiles(Array.from(files).filter((f) => isPdfFile(f) || isImageFile(f)).map((f) => ({ source: f, name: f.name })));
 
   const clearAll = useCallback(() => {
     analysisCache.current.clear();
@@ -272,7 +283,7 @@ export function Analyzer({ storage, account }: Props) {
     const hit = analysisCache.current.get(g.id);
     const ov = overrides[g.id];
     if (hit && hit.sig === sig && hit.rules === active.rules && hit.catalog === catalog && hit.overrides === ov) return hit.analysis;
-    const analysis = analyzeFiles(readable.map((m) => ({ fileName: m.fileName, items: m.items })), active.rules, catalog, ov);
+    const analysis = analyzeFiles(readable.map((m) => ({ fileName: m.fileName, items: m.items, ocr: m.ocr })), active.rules, catalog, ov);
     analysisCache.current.set(g.id, { sig, rules: active.rules, catalog, overrides: ov, analysis });
     return analysis;
   };
@@ -291,6 +302,7 @@ export function Analyzer({ storage, account }: Props) {
           birth: g.birth,
           age,
           members: g.members.map((m) => ({ id: m.id, fileName: m.fileName })),
+          ocr: readable.some((m) => m.ocr),
           problem: readable.length ? undefined : g.members[0].problem,
           analysis: readable.length ? cachedAnalysis(g, readable) : null,
         };
@@ -394,7 +406,7 @@ export function Analyzer({ storage, account }: Props) {
       />
 
       <section className="card" data-tour="upload">
-        <SectionHead n={2} title="Laudos dos pacientes" hint="Envie um ou vários PDFs de uma vez (um laudo por paciente). A ferramenta encontra cada resultado pelo nome do exame." />
+        <SectionHead n={2} title="Laudos dos pacientes" hint="Envie um ou vários laudos de uma vez (PDF ou foto). A ferramenta encontra cada resultado pelo nome do exame." />
         <label
           className={`drop${over ? " over" : ""}`}
           onDragOver={(e) => { e.preventDefault(); setOver(true); }}
@@ -406,12 +418,12 @@ export function Analyzer({ storage, account }: Props) {
           }}
         >
           <span className="drop-icon"><IconUpload /></span>
-          <strong>{busy ? `Lendo laudos… ${progress.done} de ${progress.total}` : "Arraste os PDFs aqui"}</strong>
-          <span className="muted">{busy ? "Aguarde, a leitura acontece no seu computador." : "ou clique para escolher um ou vários arquivos"}</span>
+          <strong>{busy ? `Lendo laudos… ${progress.done} de ${progress.total}` : "Arraste os laudos aqui"}</strong>
+          <span className="muted">{busy ? progress.note ?? "Aguarde, a leitura acontece no seu computador." : "PDF digital, PDF escaneado ou foto (JPG, PNG) · ou clique para escolher"}</span>
           {busy && <progress className="bar" value={progress.done} max={progress.total} />}
           <input
             type="file"
-            accept="application/pdf"
+            accept="application/pdf,image/*"
             multiple
             hidden
             onChange={(e) => {
@@ -422,7 +434,7 @@ export function Analyzer({ storage, account }: Props) {
         </label>
         <div className="row" style={{ marginTop: 12 }}>
           <button className="small" onClick={loadExamples} disabled={busy}>Testar com 3 laudos de exemplo</button>
-          <span className="muted">Nesta versão são lidos laudos digitais (PDF com texto), não fotos nem scans.</span>
+          <span className="muted">Escaneados e fotos usam reconhecimento de imagem (OCR), no seu computador, e levam mais tempo. Podem ter erros: confira os valores.</span>
         </div>
       </section>
 
@@ -437,6 +449,7 @@ export function Analyzer({ storage, account }: Props) {
                 <div className="patient-name big">{single.label}</div>
                 <div className="muted">{[single.subtitle, single.members.length > 1 ? "" : single.fileName].filter(Boolean).join(" · ")}</div>
                 <MembersList members={single.members} onSeparate={separate} />
+                {single.ocr && <OcrNotice />}
               </div>
               <div className="row">
                 <button className="small" onClick={() => copySingle(single)}>{copiedSingle ? "✓ Resumo copiado" : "Copiar resumo"}</button>

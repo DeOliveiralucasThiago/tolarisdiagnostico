@@ -9,6 +9,8 @@ export interface Member {
   info: PatientInfo;
   /** Motivo, quando o PDF não pôde ser lido. */
   problem?: string;
+  /** Texto obtido por reconhecimento de imagem (OCR): pode ter erros, o médico precisa conferir. */
+  ocr?: boolean;
 }
 
 export interface Group {

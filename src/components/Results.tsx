@@ -54,7 +54,7 @@ export function Results({ analysis, overrides, onOverride, embedded = false, hea
             </tr>
           </thead>
           <tbody>
-            {rows.map(({ id, exam, rule, found, status, alternatives }) => (
+            {rows.map(({ id, exam, rule, found, status, alternatives, suspect, value }) => (
               <tr key={id} className={`row-${status}`}>
                 <td>
                   <span className={`pill ${status}`} title={STATUS_LABEL[status]}><i className={`dot ${status}`} /><span className="pill-text">{STATUS_LABEL[status]}</span></span>
@@ -72,6 +72,11 @@ export function Results({ analysis, overrides, onOverride, embedded = false, hea
                   />
                   <span className="unit">{found?.unit ?? exam.unit}</span>
                   {found?.qualifier && <span className="unit">({found.raw})</span>}
+                  {suspect && (
+                    <div className="repeated" title="Pode ser erro de leitura da imagem (por exemplo, vírgula perdida). Confira com o laudo original.">
+                      <span className="badge">⚠ conferir</span> {String(value).replace(".", ",")} é {suspect}
+                    </div>
+                  )}
                   {alternatives && (
                     <div className="repeated" title="O mesmo exame veio em mais de um arquivo com valores diferentes. Vale o do primeiro arquivo enviado; confira.">
                       <span className="badge">valor repetido</span>{" "}
