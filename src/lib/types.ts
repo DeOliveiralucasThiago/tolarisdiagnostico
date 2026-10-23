@@ -9,16 +9,32 @@ export interface TextItem {
 
 export type Status = "green" | "orange" | "red" | "unknown";
 
+export type Sex = "M" | "F";
+
 /**
- * Faixas configuradas pelo médico para um exame.
+ * Limites configurados pelo médico para um exame.
  * - `attentionFrom` / `alertFrom`: valor >= limite.
  * - `attentionBelow` / `alertBelow`: valor < limite (para exames em que valor baixo também preocupa).
  */
-export interface Rule {
+export interface Thresholds {
   attentionFrom?: number;
   alertFrom?: number;
   attentionBelow?: number;
   alertBelow?: number;
+}
+
+/** Limites específicos para um sexo e/ou faixa de idade (idades inclusivas, em anos). */
+export interface RuleVariant extends Thresholds {
+  sex?: Sex;
+  ageMin?: number;
+  ageMax?: number;
+}
+
+/**
+ * Critério de um exame: os limites "gerais" valem quando nenhuma variante por sexo/idade se aplica ao paciente.
+ */
+export interface Rule extends Thresholds {
+  variants?: RuleVariant[];
 }
 
 export interface ExamDefinition {

@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { IconLock, IconUpload, Logo } from "@/components/Icons";
-import { MembersList, OcrNotice, PatientsPanel, toExport, type PatientRow } from "@/components/PatientsPanel";
+import { MembersList, OcrNotice, PatientsPanel, SexSelect, toExport, type PatientRow } from "@/components/PatientsPanel";
 import { PrintReport, type PrintJob } from "@/components/PrintReport";
 import { PresetEditor } from "@/components/PresetEditor";
 import { SectionHead } from "@/components/SectionHead";
@@ -15,12 +15,12 @@ import { filterAndSort } from "@/lib/batch";
 import { copyText } from "@/lib/clipboard";
 import { buildSummaryText } from "@/lib/export";
 import { buildGroups, findSuggestions, mergeGroups, separateMember, type Group, type Member, type Suggestion } from "@/lib/grouping";
-import { ageFrom, formatName, parsePatient } from "@/lib/patient";
+import { ageAtExam, formatName, parsePatient } from "@/lib/patient";
 import { terminateOcr } from "@/lib/ocr-browser";
 import { isImageFile, isPdfFile, readFileInBrowser } from "@/lib/pdf-browser";
 import { DEFAULT_PRESET, loadActivePresetId, newId, pickActivePreset, saveActivePresetId, type Preset } from "@/lib/presets";
 import type { Storage } from "@/lib/storage";
-import type { ExamDefinition, TextItem } from "@/lib/types";
+import type { ExamDefinition, Sex, TextItem } from "@/lib/types";
 
 const TOUR_KEY = "tolaris.tourSeen.v1";
 
@@ -56,6 +56,8 @@ export function Analyzer({ storage, account }: Props) {
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   // união de arquivos do mesmo paciente: escolhas do médico sobre a regra automática
   const [manualGroups, setManualGroups] = useState<Record<string, string>>({});
+  // sexo informado pelo médico (vale sobre o do laudo); o sexo nunca é deduzido pelo nome
+  const [sexOverrides, setSexOverrides] = useState<Record<string, Sex>>({});
   const [dismissed, setDismissed] = useState<ReadonlySet<string>>(new Set());
   const [progress, setProgress] = useState<{ done: number; total: number; note?: string } | null>(null);
   const [over, setOver] = useState(false);
@@ -187,6 +189,7 @@ export function Analyzer({ storage, account }: Props) {
   const clearAll = useCallback(() => {
     analysisCache.current.clear();
     setManualGroups({});
+    setSexOverrides({});
     setDismissed(new Set());
     setPatients([]);
     setOverrides({});
@@ -207,6 +210,7 @@ export function Analyzer({ storage, account }: Props) {
     setPatients((ps) => ps.filter((p) => !ids.has(p.id)));
     setManualGroups((m) => Object.fromEntries(Object.entries(m).filter(([k]) => !ids.has(k))));
     setOverrides(({ [groupId]: _drop, ...rest }) => rest);
+    setSexOverrides(({ [groupId]: _s, ...rest }) => rest);
     setExpanded((e) => {
       const n = new Set(e);
       n.delete(groupId);
@@ -218,6 +222,7 @@ export function Analyzer({ storage, account }: Props) {
     setManualGroups((m) => mergeGroups(m, sg.a, sg.b));
     // as correções já feitas em cada lado passam para o paciente unido (as do primeiro prevalecem)
     setOverrides(({ [sg.b.id]: fromB, ...rest }) => ({ ...rest, [sg.a.id]: { ...(fromB ?? {}), ...(rest[sg.a.id] ?? {}) } }));
+    setSexOverrides(({ [sg.b.id]: fromB, ...rest }) => (rest[sg.a.id] || !fromB ? rest : { ...rest, [sg.a.id]: fromB }));
     analysisCache.current.delete(sg.a.id);
   };
   const dismissSuggestion = (sg: Suggestion) => setDismissed((d) => new Set(d).add(sg.key));
@@ -278,12 +283,13 @@ export function Analyzer({ storage, account }: Props) {
 
   // Corrigir um valor reanalisa só aquele paciente; mudar critérios ou arquivos reanalisa o que mudou.
   const analysisCache = useRef(new Map<string, { sig: string; rules: object; catalog: object; overrides: object | undefined; analysis: Analysis }>());
-  const cachedAnalysis = (g: Group, readable: Member[]): Analysis => {
-    const sig = readable.map((m) => m.id).join(",");
+  const cachedAnalysis = (g: Group, readable: Member[], sex: Sex | undefined, age: number | null): Analysis => {
+    // a chave inclui sexo e idade: mudar qualquer um reanalisa só este paciente
+    const sig = `${readable.map((m) => m.id).join(",")}|${sex ?? ""}|${age ?? ""}`;
     const hit = analysisCache.current.get(g.id);
     const ov = overrides[g.id];
     if (hit && hit.sig === sig && hit.rules === active.rules && hit.catalog === catalog && hit.overrides === ov) return hit.analysis;
-    const analysis = analyzeFiles(readable.map((m) => ({ fileName: m.fileName, items: m.items, altItems: m.altItems, ocr: m.ocr })), active.rules, catalog, ov);
+    const analysis = analyzeFiles(readable.map((m) => ({ fileName: m.fileName, items: m.items, altItems: m.altItems, ocr: m.ocr })), active.rules, catalog, ov, { sex, age });
     analysisCache.current.set(g.id, { sig, rules: active.rules, catalog, overrides: ov, analysis });
     return analysis;
   };
@@ -291,27 +297,34 @@ export function Analyzer({ storage, account }: Props) {
   const rows: PatientRow[] = useMemo(
     () =>
       groups.map((g) => {
-        const age = g.birth ? ageFrom(g.birth) : null;
+        const age = ageAtExam(g.birth, g.examDate);
+        const sex = sexOverrides[g.id] ?? g.sex;
         const readable = g.members.filter((m) => !m.problem);
         const files = g.members.map((m) => m.fileName);
         return {
           id: g.id,
           label: g.name ? formatName(g.name) : files[0].replace(/\.pdf$/i, ""),
           fileName: files.join(" | "),
-          subtitle: [age != null ? `${age} anos` : "", files.length > 1 ? `${files.length} arquivos` : ""].filter(Boolean).join(" · "),
+          subtitle: [age != null ? `${age} anos` : "", sex ? (sex === "F" ? "feminino" : "masculino") : "", files.length > 1 ? `${files.length} arquivos` : ""].filter(Boolean).join(" · "),
+          sex,
+          sexSource: sexOverrides[g.id] ? ("manual" as const) : g.sex ? ("laudo" as const) : undefined,
+          sexConflict: g.sexConflict && !sexOverrides[g.id],
           birth: g.birth,
           age,
           members: g.members.map((m) => ({ id: m.id, fileName: m.fileName })),
           ocr: readable.some((m) => m.ocr),
           via: g.via,
           problem: readable.length ? undefined : g.members[0].problem,
-          analysis: readable.length ? cachedAnalysis(g, readable) : null,
+          analysis: readable.length ? cachedAnalysis(g, readable, sex, age) : null,
         };
       }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [groups, active.rules, catalog, overrides],
+    [groups, active.rules, catalog, overrides, sexOverrides],
   );
   rowsRef.current = rows;
+
+  const usesSex = Object.values(active.rules).some((r) => r.variants?.some((v) => v.sex));
+  const setSex = (id: string, sex: Sex | "") => setSexOverrides((o) => (sex ? { ...o, [id]: sex } : (({ [id]: _drop, ...rest }) => rest)(o)));
 
   const exams = Object.keys(active.rules)
     .map((id) => catalog.find((e) => e.id === id))
@@ -450,6 +463,11 @@ export function Analyzer({ storage, account }: Props) {
                 <div className="patient-name big">{single.label}</div>
                 <div className="muted">{[single.subtitle, single.members.length > 1 ? "" : single.fileName].filter(Boolean).join(" · ")}</div>
                 <MembersList members={single.members} onSeparate={separate} via={single.via} />
+                <div className="profile">
+                  <span className="muted">Sexo:</span>
+                  <SexSelect value={single.sex} source={single.sexSource} conflict={single.sexConflict} onChange={(v) => setSex(single.id, v)} />
+                  {usesSex && !single.sex && <span className="hint">Seus critérios têm faixas por sexo: informe para aplicá-las.</span>}
+                </div>
                 {single.ocr && <OcrNotice />}
               </div>
               <div className="row">
@@ -472,6 +490,8 @@ export function Analyzer({ storage, account }: Props) {
           patients={rows}
           exams={exams}
           presetName={active.name}
+          usesSex={usesSex}
+          onSex={setSex}
           suggestions={suggestions}
           onMerge={mergeSuggestion}
           onDismiss={dismissSuggestion}

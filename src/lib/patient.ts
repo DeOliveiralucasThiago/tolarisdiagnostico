@@ -1,6 +1,6 @@
 import { extractCpf } from "./cpf";
 import { buildRows } from "./extract";
-import type { TextItem } from "./types";
+import type { Sex, TextItem } from "./types";
 
 export interface PatientInfo {
   name?: string;
@@ -8,6 +8,10 @@ export interface PatientInfo {
   birth?: string;
   /** 11 dígitos, só se válido. Serve apenas para vincular arquivos do mesmo paciente (nunca é exibido). */
   cpf?: string;
+  /** Só quando o laudo informa o sexo (nunca é deduzido pelo nome). */
+  sex?: Sex;
+  /** Data do exame/coleta (dd/mm/aaaa), usada para calcular a idade na data do exame. */
+  examDate?: string;
 }
 
 const HEADER_ROWS = 45;
@@ -17,6 +21,11 @@ const STOP = "(?:dn|d\\.n\\.|data|dt\\.?|nasc\\w*|cpf|rg|sexo|idade|conv[eê]nio
 // "NOME MÉDICO:" e "NOME SOCIAL:" não casam, pois exigimos ":" logo após "nome".
 const NAME_RE = new RegExp(`(?:^|\\s)(?:paciente|cliente|nome\\s+do\\s+paciente|nome)\\s*:\\s*(.+?)(?=\\s+${STOP}\\b|$)`, "i");
 const BIRTH_RE = /(?:\bdn|d\.n\.|data\s+de\s+nasc\w*|nasc\w*)\.?\s*:?\s*(\d{2}\/\d{2}\/\d{4})/i;
+const SEX_RE = /\b(?:sexo|g[eê]nero)\b\s*:?\s*(masculino|feminino|m|f)\b/i;
+const EXAM_DATE_RES = [
+  /coleta\D{0,30}?(\d{2}\/\d{2}\/\d{4})/i,
+  /\bdata\s+(?:de\s+)?(?:entrada|atendimento|cadastro|emiss[aã]o|exame)\D{0,15}?(\d{2}\/\d{2}\/\d{4})/i,
+];
 const VALID_NAME = /^[A-Za-zÀ-ÿ'.\- ]{3,80}$/;
 
 /** Lê nome e data de nascimento do cabeçalho do laudo (primeira página). */
@@ -34,7 +43,21 @@ export function parsePatient(items: TextItem[]): PatientInfo {
       if (b) info.birth = b[1];
     }
     if (!info.cpf) info.cpf = extractCpf(row.text);
-    if (info.name && info.birth && info.cpf) break;
+    if (!info.sex) {
+      const m = SEX_RE.exec(row.text);
+      // linhas de tabela de referência ("SEXO MASCULINO SEXO FEMININO") não são o sexo do paciente
+      if (m && !(/masculino/i.test(row.text) && /feminino/i.test(row.text))) info.sex = /^m/i.test(m[1]) ? "M" : "F";
+    }
+    if (!info.examDate) {
+      for (const re of EXAM_DATE_RES) {
+        const e = re.exec(row.text);
+        if (e) {
+          info.examDate = e[1];
+          break;
+        }
+      }
+    }
+    if (info.name && info.birth && info.cpf && info.sex && info.examDate) break;
   }
   return info;
 }
@@ -57,4 +80,17 @@ export function ageFrom(birth: string, today: Date = new Date()): number | null 
   let age = today.getFullYear() - y;
   if (today.getMonth() + 1 < mo || (today.getMonth() + 1 === mo && today.getDate() < d)) age--;
   return age >= 0 && age < 130 ? age : null;
+}
+
+/** "25/06/2025" -> Date (ou null se inválida). */
+export function parseBR(date: string | undefined): Date | null {
+  const m = date ? /^(\d{2})\/(\d{2})\/(\d{4})$/.exec(date) : null;
+  if (!m) return null;
+  const d = new Date(Number(m[3]), Number(m[2]) - 1, Number(m[1]));
+  return d.getMonth() === Number(m[2]) - 1 ? d : null;
+}
+
+/** Idade na data do exame (quando conhecida); senão, hoje. */
+export function ageAtExam(birth: string | undefined, examDate: string | undefined, today: Date = new Date()): number | null {
+  return birth ? ageFrom(birth, parseBR(examDate) ?? today) : null;
 }

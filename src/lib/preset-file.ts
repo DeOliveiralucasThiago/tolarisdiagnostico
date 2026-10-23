@@ -1,6 +1,6 @@
 import { EXAMS } from "./exams";
 import type { Preset } from "./presets";
-import type { ExamDefinition, Rule } from "./types";
+import type { ExamDefinition, Rule, RuleVariant, Thresholds } from "./types";
 
 /**
  * Arquivo de backup/compartilhamento de critérios. Contém só presets e os exames personalizados que eles
@@ -18,7 +18,8 @@ export interface PresetFile {
 const MAX_BYTES = 1_000_000;
 const MAX_PRESETS = 50;
 const MAX_EXAMS = 200;
-const RULE_KEYS: (keyof Rule)[] = ["attentionFrom", "alertFrom", "attentionBelow", "alertBelow"];
+const RULE_KEYS: (keyof Thresholds)[] = ["attentionFrom", "alertFrom", "attentionBelow", "alertBelow"];
+const MAX_VARIANTS = 12;
 const BUILTIN = new Set(EXAMS.map((e) => e.id));
 const isCustomId = (id: string) => /^custom_[A-Za-z0-9_-]{1,64}$/.test(id);
 
@@ -43,14 +44,43 @@ export function presetFileName(presets: Preset[]): string {
 const str = (v: unknown, max: number): string | null =>
   typeof v === "string" && v.trim().length > 0 && v.length <= max ? v.trim() : null;
 
-function cleanRule(v: unknown): Rule | null {
-  if (typeof v !== "object" || v === null || Array.isArray(v)) return null;
-  const rule: Rule = {};
+function cleanThresholds(v: Record<string, unknown>): Thresholds | null {
+  const out: Thresholds = {};
   for (const k of RULE_KEYS) {
-    const n = (v as Record<string, unknown>)[k];
+    const n = v[k];
     if (n === undefined || n === null) continue;
     if (typeof n !== "number" || !Number.isFinite(n)) return null;
-    rule[k] = n;
+    out[k] = n;
+  }
+  return out;
+}
+
+const age = (n: unknown): number | null | undefined =>
+  n === undefined || n === null ? undefined : typeof n === "number" && Number.isFinite(n) && n >= 0 && n <= 130 ? n : null;
+
+function cleanRule(v: unknown): Rule | null {
+  if (typeof v !== "object" || v === null || Array.isArray(v)) return null;
+  const o = v as Record<string, unknown>;
+  const base = cleanThresholds(o);
+  if (!base) return null;
+  const rule: Rule = { ...base };
+  if (o.variants !== undefined && o.variants !== null) {
+    if (!Array.isArray(o.variants) || o.variants.length > MAX_VARIANTS) return null;
+    const variants: RuleVariant[] = [];
+    for (const raw of o.variants as unknown[]) {
+      if (typeof raw !== "object" || raw === null || Array.isArray(raw)) return null;
+      const r = raw as Record<string, unknown>;
+      const t = cleanThresholds(r);
+      const min = age(r.ageMin), max = age(r.ageMax);
+      if (!t || min === null || max === null) return null;
+      if (r.sex !== undefined && r.sex !== null && r.sex !== "M" && r.sex !== "F") return null;
+      const variant: RuleVariant = { ...t };
+      if (r.sex === "M" || r.sex === "F") variant.sex = r.sex;
+      if (min !== undefined) variant.ageMin = min;
+      if (max !== undefined) variant.ageMax = max;
+      variants.push(variant);
+    }
+    if (variants.length) rule.variants = variants;
   }
   return rule;
 }

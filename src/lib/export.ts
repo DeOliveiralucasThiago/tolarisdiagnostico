@@ -1,6 +1,6 @@
 import type { Analysis, AnalysisRow } from "./analysis";
 import { STATUS_LABEL } from "./status";
-import type { ExamDefinition, Status } from "./types";
+import type { ExamDefinition, Sex, Status } from "./types";
 
 export interface ExportPatient {
   label: string;
@@ -12,8 +12,10 @@ export interface ExportPatient {
   problem?: string;
   /** Lido por reconhecimento de imagem (OCR). */
   ocr?: boolean;
+  sex?: Sex;
 }
 
+const sexName = (s?: Sex) => (s === "M" ? "Masculino" : s === "F" ? "Feminino" : "");
 const dec = (n: number | null | undefined) => (n == null || Number.isNaN(n) ? "" : String(n).replace(".", ","));
 const unitOf = (r: AnalysisRow) => r.found?.unit ?? r.exam.unit;
 const overall = (s: Status) => (s === "unknown" ? "Exames não localizados" : STATUS_LABEL[s]);
@@ -43,7 +45,7 @@ export function attentionList(a: Analysis): string {
  */
 export function buildBatchCsv(patients: ExportPatient[], exams: ExamDefinition[]): string {
   const head = [
-    "Paciente", "Data de nascimento", "Idade", "Arquivo", "Leitura", "Situação geral", "Vermelhos", "Laranjas", "Verdes", "Não localizados", "Para atenção",
+    "Paciente", "Data de nascimento", "Idade", "Sexo", "Arquivo", "Leitura", "Situação geral", "Vermelhos", "Laranjas", "Verdes", "Não localizados", "Para atenção",
     ...exams.flatMap((e) => [`${e.name}${e.unit ? ` (${e.unit})` : ""}`, `${e.name} - situação`]),
   ];
   const lines = [head.map(csvCell).join(";")];
@@ -51,7 +53,7 @@ export function buildBatchCsv(patients: ExportPatient[], exams: ExamDefinition[]
   for (const p of patients) {
     const a = p.analysis;
     const cells: string[] = [
-      safeText(p.label), p.birth ?? "", p.age != null ? String(p.age) : "", safeText(p.fileName),
+      safeText(p.label), p.birth ?? "", p.age != null ? String(p.age) : "", sexName(p.sex), safeText(p.fileName),
       p.ocr ? "OCR (conferir)" : "Texto do PDF",
       a ? overall(a.worst) : "Não lido",
       a ? String(a.counts.red) : "", a ? String(a.counts.orange) : "", a ? String(a.counts.green) : "", a ? String(a.counts.unknown) : "",
@@ -73,7 +75,8 @@ export function csvFileName(date: Date = new Date()): string {
 
 /** Resumo em texto de UM paciente, para colar no ASO ou em outro sistema. */
 export function buildSummaryText(p: ExportPatient, presetName: string, date: Date = new Date()): string {
-  const who = p.age != null ? `${p.label} (${p.age} anos)` : p.label;
+  const extra = [p.age != null ? `${p.age} anos` : "", sexName(p.sex).toLowerCase()].filter(Boolean).join(", ");
+  const who = extra ? `${p.label} (${extra})` : p.label;
   const out = [`Triagem de exames: ${who}`, `Data: ${date.toLocaleDateString("pt-BR")} · Critérios: ${presetName}`, ""];
   if (!p.analysis) {
     out.push(`Não foi possível ler o laudo (${p.fileName}): ${p.problem ?? "erro desconhecido"}`);

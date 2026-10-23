@@ -57,7 +57,7 @@ export function PrintReport({ job, rows, presetName, date }: Props) {
                       <td>{r.exam.name}</td>
                       <td>{r.value != null ? `${dec(r.value)} ${r.found?.unit ?? r.exam.unit}` : "—"}</td>
                       <td>{r.found?.labReference ?? "—"}</td>
-                      <td>{describeRule(r.rule)}</td>
+                      <td>{r.ruleLabel ? `${r.ruleLabel}: ` : ""}{describeRule(r.rule)}</td>
                     </tr>
                   ))}
                 </tbody>

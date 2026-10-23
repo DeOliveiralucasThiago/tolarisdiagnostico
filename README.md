@@ -21,6 +21,9 @@ Se os exames de um mesmo paciente vierem em PDFs diferentes, a ferramenta reúne
 - **Imprimir / PDF:** relatório do paciente ou do lote pelo diálogo de impressão do navegador ("Salvar como PDF").
 Tudo é gerado no navegador; nada é enviado a servidor.
 
+## Faixas por sexo e idade
+Em cada exame do preset, **＋ Sexo / idade** adiciona faixas específicas (sexo e/ou idade mínima e máxima, inclusivas), com os mesmos limites de laranja e vermelho. Vale a **primeira faixa que combinar** com o paciente; se nenhuma combinar, vale a **faixa geral** (`src/lib/status.ts`, `resolveRule`). O sexo vem do laudo quando ele informa ("Sexo: Feminino"), ou o médico escolhe por paciente (coluna **Sexo**): ele **nunca é deduzido pelo nome**. Laudos do mesmo paciente com sexos diferentes pedem a escolha do médico. A idade é calculada **na data do exame** (coleta/entrada, quando consta no laudo; senão, hoje). Faixa específica sem o dado do paciente é pulada e a tela avisa; exame que só tem faixas por sexo e sexo desconhecido fica **cinza**, nunca verde. A planilha traz a coluna Sexo, e a tela mostra qual faixa valeu ("Mulheres: laranja < 12 …").
+
 ## Presets: criar, baixar e importar
 Em **Criar preset** o médico monta um novo conjunto de critérios (cópia do atual ou em branco). **Baixar este preset / Baixar todos** gera um arquivo `.json` só com critérios e os exames personalizados usados (nunca dados de pacientes), e **Importar arquivo** o carrega em outro computador, sem sobrescrever nada (`src/lib/preset-file.ts`, com validação rigorosa do arquivo recebido).
 
@@ -54,4 +57,4 @@ Para publicar um ambiente de testes (Render + Supabase + Brevo para e-mails), ve
 `npm test` inclui testes de isolamento entre clínicas que rodam a migração em um Postgres real (PGlite).
 
 ## Próximos passos
-Validar com laudos reais anonimizados, ampliar o catálogo/sinônimos, faixas por sexo/idade, convite de outros médicos para a clínica, cobrança/planos.
+Validar com laudos reais anonimizados, ampliar o catálogo/sinônimos, convite de outros médicos para a clínica, cobrança/planos.

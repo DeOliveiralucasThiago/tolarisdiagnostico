@@ -22,15 +22,15 @@ describe("planilha CSV do lote", () => {
 
   it("começa com BOM e usa ';' (abre certo no Excel em português)", () => {
     expect(csv.startsWith("﻿")).toBe(true);
-    expect(lines[0].split(";")).toHaveLength(15);
+    expect(lines[0].split(";")).toHaveLength(16);
   });
   it("cabeçalho com valor e situação de cada exame do preset", () => {
     expect(lines[0]).toContain("Glicose (jejum) (mg/dL);Glicose (jejum) - situação;Colesterol HDL (mg/dL);Colesterol HDL - situação");
   });
   it("uma linha por paciente, números com vírgula decimal e situação em texto", () => {
     expect(lines).toHaveLength(3);
-    expect(lines[1]).toBe("Maria Souza;03/11/1990;35;Maria Souza.pdf;Texto do PDF;Acima do limite;1;1;0;0;Glicose (jejum) 131,5 | Colesterol HDL 36;131,5;Acima do limite;36;Requer análise");
-    expect(lines[2].split(";").slice(5, 10)).toEqual(["Dentro do padrão", "0", "0", "2", "0"]);
+    expect(lines[1]).toBe("Maria Souza;03/11/1990;35;;Maria Souza.pdf;Texto do PDF;Acima do limite;1;1;0;0;Glicose (jejum) 131,5 | Colesterol HDL 36;131,5;Acima do limite;36;Requer análise");
+    expect(lines[2].split(";").slice(6, 11)).toEqual(["Dentro do padrão", "0", "0", "2", "0"]);
   });
   it("arquivo ilegível vira linha 'Não lido' com o motivo", () => {
     const l = buildBatchCsv([{ label: "scan", fileName: "scan.pdf", analysis: null, problem: "Sem texto selecionável" }], exams).split("\r\n")[1];
@@ -39,8 +39,13 @@ describe("planilha CSV do lote", () => {
   });
   it("marca a leitura por OCR para o médico conferir", () => {
     const l = buildBatchCsv([pac("Scan", "90", "50", { ocr: true })], exams).split("\r\n")[1];
-    expect(l.split(";")[4]).toBe("OCR (conferir)");
+    expect(l.split(";")[5]).toBe("OCR (conferir)");
     expect(buildSummaryText(pac("Scan", "90", "50", { ocr: true }), "P")).toContain("lido por reconhecimento de imagem (OCR)");
+  });
+  it("inclui o sexo (quando conhecido) na planilha e no resumo", () => {
+    const l = buildBatchCsv([pac("Ana", "90", "50", { sex: "F", age: 30 })], exams).split("\r\n")[1];
+    expect(l.split(";").slice(0, 4)).toEqual(["Ana", "", "30", "Feminino"]);
+    expect(buildSummaryText(pac("Ana", "90", "50", { sex: "F", age: 30 }), "P")).toContain("Ana (30 anos, feminino)");
   });
   it("exame não localizado fica com valor vazio e situação 'Não localizado'", () => {
     const p: ExportPatient = { label: "X", fileName: "x.pdf", analysis: analyze([mk("Glicose", 700), mk("90", 700, 200)], rules, EXAMS) };

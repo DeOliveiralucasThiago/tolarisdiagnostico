@@ -1,15 +1,16 @@
 "use client";
 
-import { useState } from "react";
+import { Fragment, useState } from "react";
 import { useRef } from "react";
 import { IconChevron, IconDownload, IconPlus, IconUpload } from "@/components/Icons";
 import { SectionHead } from "@/components/SectionHead";
 import { makeCustomExam } from "@/lib/custom-exams";
 import { buildPresetFile, mergeImport, parsePresetFile, presetFileName } from "@/lib/preset-file";
 import { newId, type Preset } from "@/lib/presets";
-import type { ExamDefinition, Rule } from "@/lib/types";
+import { variantLabel } from "@/lib/status";
+import type { ExamDefinition, Rule, RuleVariant, Thresholds } from "@/lib/types";
 
-const FIELDS: { key: keyof Rule; label: string }[] = [
+const FIELDS: { key: keyof Thresholds; label: string }[] = [
   { key: "attentionFrom", label: "Laranja a partir de" },
   { key: "alertFrom", label: "Vermelho a partir de" },
   { key: "attentionBelow", label: "Laranja abaixo de" },
@@ -37,13 +38,49 @@ export function PresetEditor({ presets, activeId, catalog, onChange, customExams
   const update = (patch: Partial<Preset>) =>
     onChange(presets.map((p) => (p.id === active.id ? { ...p, ...patch } : p)), active.id);
 
-  const setField = (examId: string, key: keyof Rule, raw: string) => {
+  const setField = (examId: string, key: keyof Thresholds, raw: string) => {
     const rule = { ...(active.rules[examId] ?? {}) };
     const n = raw.trim() === "" ? undefined : Number(raw.replace(",", "."));
     if (n === undefined || Number.isNaN(n)) delete rule[key];
     else rule[key] = n;
     update({ rules: { ...active.rules, [examId]: rule } });
   };
+
+  // --- faixas por sexo e idade ---
+  const [openVariants, setOpenVariants] = useState<Set<string>>(new Set());
+  const toggleVariants = (id: string) =>
+    setOpenVariants((o) => {
+      const n = new Set(o);
+      if (n.has(id)) n.delete(id);
+      else n.add(id);
+      return n;
+    });
+  const setVariants = (examId: string, fn: (v: RuleVariant[]) => RuleVariant[]) => {
+    const rule = active.rules[examId] ?? {};
+    const variants = fn(rule.variants ?? []);
+    const next: Rule = { ...rule };
+    if (variants.length) next.variants = variants;
+    else delete next.variants;
+    update({ rules: { ...active.rules, [examId]: next } });
+  };
+  const addVariant = (examId: string) => {
+    setOpenVariants((o) => new Set(o).add(examId));
+    // sugere Mulheres e depois Homens, que é o caso mais comum
+    setVariants(examId, (v) => [...v, v.some((x) => x.sex === "F") ? (v.some((x) => x.sex === "M") ? {} : { sex: "M" }) : { sex: "F" }]);
+  };
+  const patchVariant = (examId: string, idx: number, patch: Partial<RuleVariant>) =>
+    setVariants(examId, (v) => v.map((x, i) => (i === idx ? { ...x, ...patch } : x)));
+  const setVariantNumber = (examId: string, idx: number, key: keyof Thresholds | "ageMin" | "ageMax", raw: string) =>
+    setVariants(examId, (v) =>
+      v.map((x, i) => {
+        if (i !== idx) return x;
+        const next = { ...x };
+        const n = raw.trim() === "" ? undefined : Number(raw.replace(",", "."));
+        if (n === undefined || Number.isNaN(n)) delete next[key];
+        else next[key] = n;
+        return next;
+      }),
+    );
 
   const addExam = (examId: string) => {
     if (examId && !active.rules[examId]) update({ rules: { ...active.rules, [examId]: {} } });
@@ -225,31 +262,84 @@ export function PresetEditor({ presets, activeId, catalog, onChange, customExams
                 {inPreset.length === 0 && (
                   <tr><td colSpan={6} className="muted">Nenhum exame neste preset. Use o “+” abaixo para adicionar.</td></tr>
                 )}
-                {inPreset.map((exam, i) => (
-                  <tr key={exam.id} data-tour={i === 0 ? "rule-row" : undefined}>
-                    <td>
-                      <span className="exam-name">{exam.name}</span> {exam.unit && <span className="muted">({exam.unit})</span>}
-                      {isCustom(exam.id) && <div className="muted">procura por: {exam.aliases.join(", ")}</div>}
-                    </td>
-                    {FIELDS.map((f) => (
-                      <td key={f.key}>
-                        <input
-                          type="number"
-                          step="any"
-                          value={active.rules[exam.id]?.[f.key] ?? ""}
-                          onChange={(e) => setField(exam.id, f.key, e.target.value)}
-                          aria-label={`${exam.name} - ${f.label}`}
-                        />
-                      </td>
-                    ))}
-                    <td style={{ whiteSpace: "nowrap" }}>
-                      <button className="small ghost" onClick={() => removeExam(exam.id)} title="Tirar do preset" aria-label={`Remover ${exam.name} do preset`}>✕</button>
-                      {isCustom(exam.id) && (
-                        <button className="small ghost" onClick={() => deleteCustom(exam.id)} title="Apagar este exame personalizado" aria-label={`Apagar exame personalizado ${exam.name}`}>🗑</button>
+                {inPreset.map((exam, i) => {
+                  const variants = active.rules[exam.id]?.variants ?? [];
+                  const open = openVariants.has(exam.id) || variants.length > 0;
+                  return (
+                    <Fragment key={exam.id}>
+                      <tr data-tour={i === 0 ? "rule-row" : undefined}>
+                        <td>
+                          <span className="exam-name">{exam.name}</span> {exam.unit && <span className="muted">({exam.unit})</span>}
+                          {variants.length > 0 && <span className="muted"> · faixa geral</span>}
+                          {isCustom(exam.id) && <div className="muted">procura por: {exam.aliases.join(", ")}</div>}
+                          <div>
+                            <button className="small ghost" onClick={() => (open && variants.length === 0 ? toggleVariants(exam.id) : addVariant(exam.id))} title="Definir limites diferentes por sexo e idade">
+                              ＋ Sexo / idade{variants.length ? ` (${variants.length})` : ""}
+                            </button>
+                          </div>
+                        </td>
+                        {FIELDS.map((f) => (
+                          <td key={f.key}>
+                            <input
+                              type="number"
+                              step="any"
+                              value={active.rules[exam.id]?.[f.key] ?? ""}
+                              onChange={(e) => setField(exam.id, f.key, e.target.value)}
+                              aria-label={`${exam.name} - ${f.label}`}
+                            />
+                          </td>
+                        ))}
+                        <td style={{ whiteSpace: "nowrap" }}>
+                          <button className="small ghost" onClick={() => removeExam(exam.id)} title="Tirar do preset" aria-label={`Remover ${exam.name} do preset`}>✕</button>
+                          {isCustom(exam.id) && (
+                            <button className="small ghost" onClick={() => deleteCustom(exam.id)} title="Apagar este exame personalizado" aria-label={`Apagar exame personalizado ${exam.name}`}>🗑</button>
+                          )}
+                        </td>
+                      </tr>
+                      {open && variants.length > 0 && (
+                        <>
+                          {variants.map((v, idx) => (
+                            <tr key={`${exam.id}-v${idx}`} className="variant-row">
+                              <td>
+                                <div className="variant-cell">
+                                  <span className="muted">↳</span>
+                                  <select value={v.sex ?? ""} onChange={(e) => patchVariant(exam.id, idx, { sex: (e.target.value || undefined) as RuleVariant["sex"] })} aria-label={`${exam.name} - faixa ${idx + 1}: sexo`}>
+                                    <option value="">Todos os sexos</option>
+                                    <option value="M">Homens</option>
+                                    <option value="F">Mulheres</option>
+                                  </select>
+                                  <span className="muted">idade</span>
+                                  <input type="number" min={0} max={130} placeholder="de" value={v.ageMin ?? ""} onChange={(e) => setVariantNumber(exam.id, idx, "ageMin", e.target.value)} aria-label={`${exam.name} - faixa ${idx + 1}: idade mínima`} style={{ width: 64 }} />
+                                  <input type="number" min={0} max={130} placeholder="até" value={v.ageMax ?? ""} onChange={(e) => setVariantNumber(exam.id, idx, "ageMax", e.target.value)} aria-label={`${exam.name} - faixa ${idx + 1}: idade máxima`} style={{ width: 64 }} />
+                                </div>
+                              </td>
+                              {FIELDS.map((f) => (
+                                <td key={f.key}>
+                                  <input
+                                    type="number"
+                                    step="any"
+                                    value={v[f.key] ?? ""}
+                                    onChange={(e) => setVariantNumber(exam.id, idx, f.key, e.target.value)}
+                                    aria-label={`${exam.name} (${variantLabel(v)}) - ${f.label}`}
+                                  />
+                                </td>
+                              ))}
+                              <td>
+                                <button className="small ghost" onClick={() => setVariants(exam.id, (list) => list.filter((_, i) => i !== idx))} title="Remover esta faixa" aria-label={`Remover faixa ${idx + 1} de ${exam.name}`}>✕</button>
+                              </td>
+                            </tr>
+                          ))}
+                          <tr className="variant-row">
+                            <td colSpan={6}>
+                              <button className="small" onClick={() => addVariant(exam.id)}>＋ Outra faixa</button>{" "}
+                              <span className="muted">Vale a primeira faixa que combinar com o paciente; se nenhuma combinar, vale a faixa geral acima. Sem o sexo ou a idade do paciente, a faixa específica não é aplicada.</span>
+                            </td>
+                          </tr>
+                        </>
                       )}
-                    </td>
-                  </tr>
-                ))}
+                    </Fragment>
+                  );
+                })}
               </tbody>
             </table>
           </div>

@@ -3,7 +3,7 @@
 import { SectionHead } from "./SectionHead";
 import type { Analysis } from "@/lib/analysis";
 import { STATUS_LABEL } from "@/lib/status";
-import type { Rule, Status } from "@/lib/types";
+import type { Status, Thresholds } from "@/lib/types";
 
 interface Props {
   analysis: Analysis;
@@ -16,7 +16,7 @@ interface Props {
   header?: React.ReactNode;
 }
 
-export function describeRule(rule: Rule): string {
+export function describeRule(rule: Thresholds): string {
   const parts: string[] = [];
   if (rule.attentionFrom != null) parts.push(`laranja ≥ ${rule.attentionFrom}`);
   if (rule.attentionBelow != null) parts.push(`laranja < ${rule.attentionBelow}`);
@@ -54,7 +54,7 @@ export function Results({ analysis, overrides, onOverride, embedded = false, hea
             </tr>
           </thead>
           <tbody>
-            {rows.map(({ id, exam, rule, found, status, alternatives, suspect, value }) => (
+            {rows.map(({ id, exam, rule, ruleLabel, ruleMissing, found, status, alternatives, suspect, value }) => (
               <tr key={id} className={`row-${status}`}>
                 <td>
                   <span className={`pill ${status}`} title={STATUS_LABEL[status]}><i className={`dot ${status}`} /><span className="pill-text">{STATUS_LABEL[status]}</span></span>
@@ -85,7 +85,11 @@ export function Results({ analysis, overrides, onOverride, embedded = false, hea
                   )}
                 </td>
                 <td className="muted">{found?.labReference ?? "—"}</td>
-                <td className="muted">{describeRule(rule)}</td>
+                <td className="muted">
+                  {ruleLabel && <strong>{ruleLabel}: </strong>}
+                  {describeRule(rule) || (ruleMissing ? `depende d${ruleMissing === "sexo" ? "o sexo" : "a idade"} do paciente` : "")}
+                  {ruleMissing && <div className="hint">Informe {ruleMissing === "sexo" ? "o sexo" : "a data de nascimento"} para aplicar a faixa específica.</div>}
+                </td>
                 <td>
                   {found ? (
                     <details>

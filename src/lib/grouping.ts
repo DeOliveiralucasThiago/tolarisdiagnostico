@@ -1,5 +1,5 @@
 import type { PatientInfo } from "./patient";
-import type { TextItem } from "./types";
+import type { Sex, TextItem } from "./types";
 
 /** Um arquivo (PDF ou imagem) enviado. Um mesmo paciente pode ter vários. */
 export interface Member {
@@ -22,6 +22,11 @@ export interface Group {
   birth?: string;
   /** Só para vincular arquivos. Nunca exibir, exportar ou guardar. */
   cpf?: string;
+  /** Sexo informado nos laudos do paciente (se concordam). */
+  sex?: Sex;
+  /** Laudos do mesmo paciente informam sexos diferentes: não escolhe nenhum, o médico define. */
+  sexConflict?: boolean;
+  examDate?: string;
   /** Como os arquivos foram reunidos (só quando há mais de um). */
   via?: "cpf" | "nome";
 }
@@ -54,7 +59,8 @@ const birthsCompatible = (a?: string, b?: string) => !a || !b || a === b;
 /** Com o mesmo CPF, nome e nascimento só podem divergir pouco: senão pode ser erro de digitação do laboratório. */
 function sameCpfCompatible(a: Member, b: Member): boolean {
   const na = a.info.name, nb = b.info.name;
-  return (!na || !nb || namesCompatible(na, nb)) && birthsCompatible(a.info.birth, b.info.birth);
+  const sexOk = !a.info.sex || !b.info.sex || a.info.sex === b.info.sex;
+  return (!na || !nb || namesCompatible(na, nb)) && birthsCompatible(a.info.birth, b.info.birth) && sexOk;
 }
 
 /**
@@ -121,11 +127,15 @@ export function buildGroups(members: Member[], manual: Record<string, string>): 
   return [...map.values()].map((g) => {
     const cpf = g.members.find((m) => m.info.cpf)?.info.cpf;
     const viaCpf = !!cpf && g.members.filter((m) => m.info.cpf === cpf).length >= 2;
+    const sexes = new Set(g.members.map((m) => m.info.sex).filter((x): x is Sex => !!x));
     return {
       ...g,
       name: g.members.find((m) => m.info.name)?.info.name,
       birth: g.members.find((m) => m.info.birth)?.info.birth,
       cpf,
+      sex: sexes.size === 1 ? [...sexes][0] : undefined,
+      sexConflict: sexes.size > 1,
+      examDate: g.members.find((m) => m.info.examDate)?.info.examDate,
       via: g.members.length > 1 ? (viaCpf ? ("cpf" as const) : ("nome" as const)) : undefined,
     };
   });

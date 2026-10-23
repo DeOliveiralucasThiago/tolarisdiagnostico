@@ -140,6 +140,8 @@ async function main() {
   writeFileSync(path.join(FIX, "bia-1.pdf"), await layoutA(withValues({ "Glicose em jejum": "90" }), [...bia, "CPF: 529.982.247-25"]));
   writeFileSync(path.join(FIX, "bia-2.pdf"), await layoutA(withValues({ "Glicose em jejum": "140" }), [...bia, "CPF: 390.533.447-05"]));
   writeFileSync(path.join(FIX, "bia-3-sem-cpf.pdf"), await layoutB(withValues({ Hemoglobina: "14,0" }), bia));
+  // laudo que informa o sexo e a data da coleta no cabeçalho (hemoglobina 12,5: normal para mulher, atenção para homem)
+  writeFileSync(path.join(FIX, "luiza-com-sexo.pdf"), await layoutA(withValues({ Hemoglobina: "12,5", "Glicose em jejum": "90" }), ["Paciente: LUIZA PRADO", "Data de nascimento: 10/10/1990", "Sexo: Feminino", "Data/Hora Coleta: 25/06/2025 - 07:12:18"]));
   console.log("Fixtures de teste gerados em", FIX);
 }
 

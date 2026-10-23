@@ -11,7 +11,7 @@ import type { Suggestion } from "@/lib/grouping";
 import { formatName } from "@/lib/patient";
 import { buildBatchCsv, buildSummaryText, csvFileName, type ExportPatient } from "@/lib/export";
 import { STATUS_LABEL } from "@/lib/status";
-import type { ExamDefinition, Status } from "@/lib/types";
+import type { ExamDefinition, Sex, Status } from "@/lib/types";
 
 export interface PatientRow extends BatchItem {
   /** "33 anos" etc. */
@@ -26,6 +26,22 @@ export interface PatientRow extends BatchItem {
   ocr: boolean;
   /** Como os arquivos foram reunidos (o CPF em si nunca é exibido). */
   via?: "cpf" | "nome";
+  /** Sexo usado na análise: do laudo ou informado pelo médico (nunca deduzido pelo nome). */
+  sex?: Sex;
+  sexSource?: "laudo" | "manual";
+  /** Os laudos do paciente informam sexos diferentes. */
+  sexConflict?: boolean;
+}
+
+export function SexSelect({ value, source, conflict, onChange }: { value?: Sex; source?: "laudo" | "manual"; conflict?: boolean; onChange: (sex: Sex | "") => void }) {
+  const tag = (s: Sex) => (value === s && source === "laudo" ? " (laudo)" : "");
+  return (
+    <select className="sex-select" value={value ?? ""} onChange={(e) => onChange(e.target.value as Sex | "")} aria-label="Sexo do paciente" title={conflict ? "Os laudos deste paciente informam sexos diferentes: escolha o correto" : "Usado nas faixas por sexo"}>
+      <option value="">{conflict ? "Conflito: escolha" : "Não informado"}</option>
+      <option value="M">Masculino{tag("M")}</option>
+      <option value="F">Feminino{tag("F")}</option>
+    </select>
+  );
 }
 
 /** Aviso para laudos lidos por OCR (foto ou escaneado): números podem vir errados. */
@@ -55,7 +71,7 @@ export function MembersList({ members, onSeparate, via }: { members: { id: strin
 }
 
 export const toExport = (p: PatientRow): ExportPatient => ({
-  label: p.label, birth: p.birth, age: p.age, fileName: p.fileName, analysis: p.analysis, problem: p.problem, ocr: p.ocr,
+  label: p.label, birth: p.birth, age: p.age, fileName: p.fileName, analysis: p.analysis, problem: p.problem, ocr: p.ocr, sex: p.sex,
 });
 
 interface Props {
@@ -63,6 +79,9 @@ interface Props {
   /** Exames configurados no preset (filtro por exame e colunas da planilha). */
   exams: ExamDefinition[];
   presetName: string;
+  /** O preset tem faixas por sexo: mostra a coluna Sexo e avisa de quem falta. */
+  usesSex: boolean;
+  onSex: (id: string, sex: Sex | "") => void;
   suggestions: Suggestion[];
   onMerge: (s: Suggestion) => void;
   onDismiss: (s: Suggestion) => void;
@@ -101,7 +120,7 @@ function attentionText(a: Analysis): string {
   return flagged.length > 3 ? `${shown} · +${flagged.length - 3}` : shown;
 }
 
-export function PatientsPanel({ patients, exams, presetName, suggestions, onMerge, onDismiss, onSeparate, onPrint, expanded, onToggle, overrides, onOverride, onRemove, onClear }: Props) {
+export function PatientsPanel({ patients, exams, presetName, usesSex, onSex, suggestions, onMerge, onDismiss, onSeparate, onPrint, expanded, onToggle, overrides, onOverride, onRemove, onClear }: Props) {
   const [filters, setFilters] = useState<BatchFilters>(DEFAULT_FILTERS);
   const visible = useMemo(() => filterAndSort(patients, filters), [patients, filters]);
 
@@ -185,6 +204,13 @@ export function PatientsPanel({ patients, exams, presetName, suggestions, onMerg
         </div>
       )}
 
+      {usesSex && patients.some((p) => p.analysis && !p.sex) && (
+        <p className="ocr-warning" role="status">
+          <strong>{patients.filter((p) => p.analysis && !p.sex).length} paciente(s) sem sexo informado.</strong> Seus critérios têm faixas por sexo: para eles valeu a faixa geral
+          (ou, se não houver faixa geral, o exame ficou sem avaliação). Informe o sexo na coluna <strong>Sexo</strong>.
+        </p>
+      )}
+
       <div className="stats" aria-live="polite" data-tour="summary">
         {STATS.map((s) => (
           <div key={s.status} className={`stat ${s.status}`}>
@@ -233,12 +259,12 @@ export function PatientsPanel({ patients, exams, presetName, suggestions, onMerg
         <table className="patients-table">
           <thead>
             <tr>
-              <th>Paciente</th><th>Situação geral</th><th>Exames</th><th>Para atenção</th><th></th>
+              <th>Paciente</th>{usesSex && <th>Sexo</th>}<th>Situação geral</th><th>Exames</th><th>Para atenção</th><th></th>
             </tr>
           </thead>
           <tbody>
             {visible.length === 0 && (
-              <tr><td colSpan={5} className="muted">Nenhum paciente corresponde aos filtros.</td></tr>
+              <tr><td colSpan={usesSex ? 6 : 5} className="muted">Nenhum paciente corresponde aos filtros.</td></tr>
             )}
             {visible.map((p, idx) => {
               const a = p.analysis;
@@ -250,6 +276,11 @@ export function PatientsPanel({ patients, exams, presetName, suggestions, onMerg
                     <div className="patient-name">{p.label}{row.ocr && <span className="badge" title="Lido por reconhecimento de imagem (OCR): confira os valores"> OCR</span>}{a?.rows.some((r) => r.suspect) && <span className="badge" title="Há valores que destoam da faixa do laboratório: provável erro de leitura"> ⚠ conferir</span>}</div>
                     <div className="muted">{[row.subtitle, p.fileName].filter(Boolean).join(" · ")}</div>
                   </td>
+                  {usesSex && (
+                    <td>
+                      <SexSelect value={row.sex} source={row.sexSource} conflict={row.sexConflict} onChange={(v) => onSex(p.id, v)} />
+                    </td>
+                  )}
                   <td>
                     {a ? (
                       <span className={`pill ${a.worst}`}><i className={`dot ${a.worst}`} />{a.worst === "unknown" ? "Exames não localizados" : STATUS_LABEL[a.worst]}</span>
@@ -283,7 +314,12 @@ export function PatientsPanel({ patients, exams, presetName, suggestions, onMerg
                 </tr>,
                 a && isOpen ? (
                   <tr key={`${p.id}-detail`} className="detail-row">
-                    <td colSpan={5} data-tour={idx === 0 ? "detail" : undefined}>
+                    <td colSpan={usesSex ? 6 : 5} data-tour={idx === 0 ? "detail" : undefined}>
+                      <div className="profile">
+                        <span className="muted">Sexo:</span>
+                        <SexSelect value={row.sex} source={row.sexSource} conflict={row.sexConflict} onChange={(v) => onSex(p.id, v)} />
+                        {row.sexConflict && <span className="hint">Os laudos informam sexos diferentes: escolha o correto.</span>}
+                      </div>
                       {row.ocr && <OcrNotice />}
                       <MembersList members={row.members} onSeparate={onSeparate} via={row.via} />
                       <div className="detail-actions">

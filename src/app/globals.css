@@ -228,3 +228,10 @@ button.link:hover:not(:disabled) { background: none; text-decoration: underline;
 .badge { display: inline-block; padding: 1px 7px; border-radius: 999px; background: var(--orange-soft); color: var(--orange); font-weight: 700; font-size: 11px; }
 
 .ocr-warning { margin: 0 0 10px; padding: 10px 12px; border-radius: 10px; background: var(--orange-soft); color: var(--text); font-size: 13.5px; border: 1px solid color-mix(in srgb, var(--orange) 35%, transparent); }
+
+/* faixas por sexo e idade */
+.variant-row td { background: var(--surface-2); }
+.variant-cell { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.sex-select { padding: 3px 6px; font-size: 13px; }
+.hint { font-size: 12px; color: var(--orange); margin-top: 2px; }
+.profile { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin: 6px 0 10px; font-size: 13px; }

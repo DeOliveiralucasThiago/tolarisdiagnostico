@@ -1,12 +1,17 @@
 import { extractResults } from "./extract";
 import { implausibleReason, referenceBounds } from "./plausibility";
-import { evaluate, STATUS_ORDER } from "./status";
-import type { ExamDefinition, ExtractedResult, Rule, Status, TextItem } from "./types";
+import { evaluate, resolveRule, STATUS_ORDER, type PatientContext } from "./status";
+import type { ExamDefinition, ExtractedResult, Rule, Status, TextItem, Thresholds } from "./types";
 
 export interface AnalysisRow {
   id: string;
   exam: ExamDefinition;
-  rule: Rule;
+  /** Limites que valeram para este paciente (da faixa geral ou da variante por sexo/idade). */
+  rule: Thresholds;
+  /** Qual faixa valeu: "Mulheres", "Geral"… (só quando o exame tem faixas por sexo/idade). */
+  ruleLabel?: string;
+  /** Faixa específica que não foi aplicada por falta do sexo ou da idade do paciente. */
+  ruleMissing?: "sexo" | "idade";
   found?: ExtractedResult;
   /** Mesmo exame em outro arquivo do mesmo paciente, com valor diferente (vale o do primeiro arquivo). */
   alternatives?: { value: number; raw: string; file: string }[];
@@ -44,6 +49,7 @@ export function analyzeFiles(
   rules: Record<string, Rule>,
   catalog: ExamDefinition[],
   overrides: Record<string, string> = {},
+  patient: PatientContext = {},
 ): Analysis {
   const examById = new Map(catalog.map((e) => [e.id, e]));
   const ids = Object.keys(rules).filter((id) => examById.has(id));
@@ -70,7 +76,8 @@ export function analyzeFiles(
       const other = first && !first.recovered ? altFile[first.i]?.get(id) : undefined;
       const divergent = other && other.value !== first.r.value ? `as duas leituras da imagem divergem (${String(first.r.value).replace(".", ",")} e ${String(other.value).replace(".", ",")})` : undefined;
       const suspect = typed ? undefined : divergent ?? (first?.recovered ? "lido só na segunda leitura da imagem" : undefined) ?? (first?.ocr ? implausibleReason(first.r.value, referenceBounds(first.r.labReference)) ?? undefined : undefined);
-      return { id, exam: examById.get(id)!, rule: rules[id], found, alternatives: alternatives.length ? alternatives : undefined, suspect, value, status: evaluate(value, rules[id]) };
+      const applied = resolveRule(rules[id], patient);
+      return { id, exam: examById.get(id)!, rule: applied.thresholds ?? {}, ruleLabel: applied.label, ruleMissing: applied.missing, found, alternatives: alternatives.length ? alternatives : undefined, suspect, value, status: evaluate(value, rules[id], patient) };
     })
     .sort((a, b) => STATUS_ORDER[a.status] - STATUS_ORDER[b.status]);
 
@@ -86,6 +93,7 @@ export function analyze(
   rules: Record<string, Rule>,
   catalog: ExamDefinition[],
   overrides: Record<string, string> = {},
+  patient: PatientContext = {},
 ): Analysis {
-  return analyzeFiles([{ fileName: "", items }], rules, catalog, overrides);
+  return analyzeFiles([{ fileName: "", items }], rules, catalog, overrides, patient);
 }

@@ -42,6 +42,7 @@ export function makeTourSteps({ ensureSample, openPreset, expandFirst }: { ensur
           <p>Informe a partir de que valor o resultado merece análise e a partir de que valor está acima do limite.</p>
           <p>Exemplo: glicose <strong>laranja a partir de 10</strong> e <strong>vermelho a partir de 20</strong>. Abaixo de 10 fica verde.</p>
           <p>Os campos “abaixo de” servem para valores baixos (ex.: hemoglobina abaixo de 12). O <strong>✕</strong> tira o exame do preset.</p>
+          <p>Precisa de limites diferentes para <strong>homens e mulheres</strong> ou por <strong>faixa de idade</strong>? Use <strong>＋ Sexo / idade</strong> na linha do exame. O sexo vem do laudo, quando informado, ou você escolhe por paciente.</p>
           <p className="muted">Os números atuais são só de exemplo. Ajuste conforme o seu critério.</p>
         </>
       ),
